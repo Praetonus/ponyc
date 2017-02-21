@@ -1,4 +1,5 @@
 #include "genmatch.h"
+#include "genbox.h"
 #include "gendesc.h"
 #include "genexpr.h"
 #include "genoperator.h"
@@ -6,6 +7,7 @@
 #include "gencall.h"
 #include "gencontrol.h"
 #include "../pass/expr.h"
+#include "../type/assemble.h"
 #include "../type/subtype.h"
 #include "../type/matchtype.h"
 #include "../type/alias.h"
@@ -727,7 +729,24 @@ LLVMValueRef gen_match(compile_t* c, ast_t* ast)
 {
   bool needed = is_result_needed(ast);
   ast_t* type = ast_type(ast);
-  AST_GET_CHILDREN(ast, match_expr, cases, else_expr);
+
+  ast_t* match_expr = NULL;
+  ast_t* cases = NULL;
+  ast_t* else_expr = NULL;
+
+  switch(ast_id(ast))
+  {
+    case TK_MATCH:
+      AST_GET_CHILDREN_NO_DECL(ast, match_expr, cases, else_expr);
+      break;
+
+    case TK_ELSEMATCH:
+      AST_GET_CHILDREN_NO_DECL(ast, cases, else_expr);
+      break;
+
+    default:
+      assert(0);
+  }
 
   // We will have no type if all case have control types.
   LLVMTypeRef phi_type = NULL;
@@ -738,8 +757,24 @@ LLVMValueRef gen_match(compile_t* c, ast_t* ast)
     phi_type = t_phi->use_type;
   }
 
-  ast_t* match_type = alias(ast_type(match_expr));
-  LLVMValueRef match_value = gen_expr(c, match_expr);
+  ast_t* match_type = NULL;
+  LLVMValueRef match_value = NULL;
+
+  if(match_expr != NULL)
+  {
+    match_type = alias(ast_type(match_expr));
+    match_value = gen_expr(c, match_expr);
+  } else {
+    // Get the type from the try.
+    match_type = (ast_t*)ast_data(ast_parent(ast));
+    match_value = c->frame->current_error;
+    assert(match_type != NULL);
+    assert(match_value != NULL);
+
+    // A machine word error is always boxed.
+    if(is_machine_word(match_type))
+      match_value = gen_unbox(c, match_type, match_value);
+  }
 
   LLVMBasicBlockRef pattern_block = codegen_block(c, "case_pattern");
   LLVMBasicBlockRef else_block = codegen_block(c, "match_else");

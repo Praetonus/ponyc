@@ -14,6 +14,9 @@ bool has_member(ast_t* members, const char* name);
 // function.
 void fun_defaults(ast_t* ast);
 
+// If the given tree is a TK_NONE expand it to a source None type.
+void expand_none_type(ast_t* ast);
+
 // Create expanded location information about the given node.
 // The resulting tree must be caught up with passes and freed by the caller.
 ast_t* expand_location(ast_t* location);

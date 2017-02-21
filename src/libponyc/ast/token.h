@@ -89,11 +89,13 @@ typedef enum token_id
   TK_ELLIPSIS,
   TK_CONSTANT,
 
-  // Newline symbols, only used by lexer and parser
+  // Newline and endline symbols, only used by lexer and parser
   TK_LPAREN_NEW,
   TK_LSQUARE_NEW,
   TK_MINUS_NEW,
   TK_MINUS_TILDE_NEW,
+
+  TK_QUESTION_END,
 
   // Keywords
   TK_COMPILE_INTRINSIC,
@@ -170,8 +172,10 @@ typedef enum token_id
   TK_WHERE,
   TK_TRY,
   TK_TRY_NO_CHECK,
+  TK_ELSEMATCH,
   TK_WITH,
   TK_ERROR,
+  TK_ELSEERROR,
   TK_COMPILE_ERROR,
 
   TK_NOT,

@@ -697,8 +697,9 @@ static void init_runtime(compile_t* c)
 #  endif
 #endif
 
-  // void pony_throw()
-  type = LLVMFunctionType(c->void_type, NULL, 0, false);
+  // void pony_throw(__object*)
+  params[0] = c->object_ptr;
+  type = LLVMFunctionType(c->void_type, params, 1, false);
   value = LLVMAddFunction(c->module, "pony_throw", type);
 #if PONY_LLVM >= 309
   LLVMAddAttributeAtIndex(value, LLVMAttributeFunctionIndex, noreturn_attr);
@@ -1055,6 +1056,7 @@ void codegen_pushscope(compile_t* c, ast_t* ast)
   frame->break_novalue_target = frame->prev->break_novalue_target;
   frame->continue_target = frame->prev->continue_target;
   frame->invoke_target = frame->prev->invoke_target;
+  frame->current_error = frame->prev->current_error;
   frame->di_file = frame->prev->di_file;
 
   if(frame->prev->di_scope != NULL)
@@ -1159,6 +1161,7 @@ void codegen_pushloop(compile_t* c, LLVMBasicBlockRef continue_target,
   frame->break_novalue_target = break_novalue_target;
   frame->continue_target = continue_target;
   frame->invoke_target = frame->prev->invoke_target;
+  frame->current_error = frame->prev->current_error;
   frame->di_file = frame->prev->di_file;
   frame->di_scope = frame->prev->di_scope;
 }
@@ -1177,11 +1180,31 @@ void codegen_pushtry(compile_t* c, LLVMBasicBlockRef invoke_target)
   frame->break_novalue_target = frame->prev->break_novalue_target;
   frame->continue_target = frame->prev->continue_target;
   frame->invoke_target = invoke_target;
+  frame->current_error = frame->prev->current_error;
   frame->di_file = frame->prev->di_file;
   frame->di_scope = frame->prev->di_scope;
 }
 
 void codegen_poptry(compile_t* c)
+{
+  pop_frame(c);
+}
+
+void codegen_pushtryelse(compile_t* c, LLVMValueRef current_error)
+{
+  compile_frame_t* frame = push_frame(c);
+
+  frame->fun = frame->prev->fun;
+  frame->break_target = frame->prev->break_target;
+  frame->break_novalue_target = frame->prev->break_novalue_target;
+  frame->continue_target = frame->prev->continue_target;
+  frame->invoke_target = frame->prev->invoke_target;
+  frame->current_error = current_error;
+  frame->di_file = frame->prev->di_file;
+  frame->di_scope = frame->prev->di_scope;
+}
+
+void codegen_poptryelse(compile_t* c)
 {
   pop_frame(c);
 }

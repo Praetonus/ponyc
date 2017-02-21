@@ -18,7 +18,7 @@ use
   ;
 
 use_ffi
-  : '@' (ID | STRING) typeargs ('(' | LPAREN_NEW) params? ')' '?'?
+  : '@' (ID | STRING) typeargs ('(' | LPAREN_NEW) params? ')' (('?' | QUESTION_END) type?)?
   ;
 
 class_def
@@ -34,7 +34,11 @@ field
   ;
 
 method
-  : ('fun' | 'be' | 'new') ('\\' ID (',' ID)* '\\')? cap? ID typeparams? ('(' | LPAREN_NEW) params? ')' (':' type)? '?'? STRING? ('if' rawseq)? ('=>' rawseq)?
+  : ('fun' | 'be' | 'new') ('\\' ID (',' ID)* '\\')? cap? ID typeparams? ('(' | LPAREN_NEW) params? ')' (':' type)? (('?' | QUESTION_END) type?)? STRING? ('if' rawseq)? ('=>' rawseq)?
+  ;
+
+annotatedseq
+  : annotatedrawseq
   ;
 
 annotatedrawseq
@@ -95,7 +99,7 @@ nextterm
   | 'repeat' ('\\' ID (',' ID)* '\\')? rawseq 'until' annotatedrawseq ('else' annotatedrawseq)? 'end'
   | 'for' ('\\' ID (',' ID)* '\\')? idseq 'in' rawseq 'do' rawseq ('else' annotatedrawseq)? 'end'
   | 'with' ('\\' ID (',' ID)* '\\')? (withelem (',' withelem)*) 'do' rawseq ('else' annotatedrawseq)? 'end'
-  | 'try' ('\\' ID (',' ID)* '\\')? rawseq ('else' annotatedrawseq)? ('then' annotatedrawseq)? 'end'
+  | 'try' ('\\' ID (',' ID)* '\\')? rawseq (('else' annotatedrawseq) | ('elsematch' ('\\' ID (',' ID)* '\\')? caseexpr* (('else' annotatedrawseq) | 'elseerror')?) | 'elseerror')? ('then' annotatedrawseq)? 'end'
   | 'recover' ('\\' ID (',' ID)* '\\')? cap? rawseq 'end'
   | 'consume' cap? term
   | nextpattern
@@ -110,7 +114,7 @@ term
   | 'repeat' ('\\' ID (',' ID)* '\\')? rawseq 'until' annotatedrawseq ('else' annotatedrawseq)? 'end'
   | 'for' ('\\' ID (',' ID)* '\\')? idseq 'in' rawseq 'do' rawseq ('else' annotatedrawseq)? 'end'
   | 'with' ('\\' ID (',' ID)* '\\')? (withelem (',' withelem)*) 'do' rawseq ('else' annotatedrawseq)? 'end'
-  | 'try' ('\\' ID (',' ID)* '\\')? rawseq ('else' annotatedrawseq)? ('then' annotatedrawseq)? 'end'
+  | 'try' ('\\' ID (',' ID)* '\\')? rawseq (('else' annotatedrawseq) | ('elsematch' ('\\' ID (',' ID)* '\\')? caseexpr* (('else' annotatedrawseq) | 'elseerror')?) | 'elseerror')? ('then' annotatedrawseq)? 'end'
   | 'recover' ('\\' ID (',' ID)* '\\')? cap? rawseq 'end'
   | 'consume' cap? term
   | pattern
@@ -119,6 +123,14 @@ term
 
 withelem
   : idseq '=' rawseq
+  ;
+
+elseerror
+  : 'elseerror'
+  ;
+
+cases
+  : caseexpr*
   ;
 
 caseexpr
@@ -131,6 +143,10 @@ elseifdef
 
 elseif
   : 'elseif' ('\\' ID (',' ID)* '\\')? rawseq 'then' rawseq (elseif | ('else' annotatedrawseq))?
+  ;
+
+elseclause
+  : 'else' annotatedrawseq
   ;
 
 idseq
@@ -194,9 +210,9 @@ nextatom
   | LPAREN_NEW rawseq tuple? ')'
   | LSQUARE_NEW ('as' type ':')? rawseq (',' rawseq)* ']'
   | 'object' ('\\' ID (',' ID)* '\\')? cap? ('is' type)? members 'end'
-  | '{' ('\\' ID (',' ID)* '\\')? cap? ID? typeparams? ('(' | LPAREN_NEW) params? ')' lambdacaptures? (':' type)? '?'? '=>' rawseq '}' cap?
-  | 'lambda' ('\\' ID (',' ID)* '\\')? cap? ID? typeparams? ('(' | LPAREN_NEW) params? ')' lambdacaptures? (':' type)? '?'? '=>' rawseq 'end'
-  | '@' (ID | STRING) typeargs? ('(' | LPAREN_NEW) positional? named? ')' '?'?
+  | '{' ('\\' ID (',' ID)* '\\')? cap? ID? typeparams? ('(' | LPAREN_NEW) params? ')' lambdacaptures? (':' type)? (('?' | QUESTION_END) type?)? '=>' rawseq '}' cap?
+  | 'lambda' ('\\' ID (',' ID)* '\\')? cap? ID? typeparams? ('(' | LPAREN_NEW) params? ')' lambdacaptures? (':' type)? (('?' | QUESTION_END) type?)? '=>' rawseq 'end'
+  | '@' (ID | STRING) typeargs? ('(' | LPAREN_NEW) positional? named? ')' (('?' type?) | QUESTION_END)?
   | '__loc'
   ;
 
@@ -207,9 +223,9 @@ atom
   | ('(' | LPAREN_NEW) rawseq tuple? ')'
   | ('[' | LSQUARE_NEW) ('as' type ':')? rawseq (',' rawseq)* ']'
   | 'object' ('\\' ID (',' ID)* '\\')? cap? ('is' type)? members 'end'
-  | '{' ('\\' ID (',' ID)* '\\')? cap? ID? typeparams? ('(' | LPAREN_NEW) params? ')' lambdacaptures? (':' type)? '?'? '=>' rawseq '}' cap?
-  | 'lambda' ('\\' ID (',' ID)* '\\')? cap? ID? typeparams? ('(' | LPAREN_NEW) params? ')' lambdacaptures? (':' type)? '?'? '=>' rawseq 'end'
-  | '@' (ID | STRING) typeargs? ('(' | LPAREN_NEW) positional? named? ')' '?'?
+  | '{' ('\\' ID (',' ID)* '\\')? cap? ID? typeparams? ('(' | LPAREN_NEW) params? ')' lambdacaptures? (':' type)? (('?' | QUESTION_END) type?)? '=>' rawseq '}' cap?
+  | 'lambda' ('\\' ID (',' ID)* '\\')? cap? ID? typeparams? ('(' | LPAREN_NEW) params? ')' lambdacaptures? (':' type)? (('?' | QUESTION_END) type?)? '=>' rawseq 'end'
+  | '@' (ID | STRING) typeargs? ('(' | LPAREN_NEW) positional? named? ')' (('?' type?) | QUESTION_END)?
   | '__loc'
   ;
 
@@ -223,6 +239,10 @@ lambdacaptures
 
 lambdacapture
   : ID (':' type)? ('=' infix)?
+  ;
+
+annotations
+  : '\\' ID (',' ID)* '\\'
   ;
 
 positional
@@ -250,7 +270,7 @@ atomtype
   ;
 
 lambdatype
-  : '{' cap? ID? typeparams? ('(' | LPAREN_NEW) (type (',' type)*)? ')' (':' type)? '?'? '}' (cap | gencap)? ('^' | '!')?
+  : '{' cap? ID? typeparams? ('(' | LPAREN_NEW) (type (',' type)*)? ')' (':' type)? (('?' | QUESTION_END) type?)? '}' (cap | gencap)? ('^' | '!')?
   ;
 
 tupletype
@@ -411,6 +431,10 @@ MINUS_NEW
 
 MINUS_TILDE_NEW
   : NEWLINE '-~'
+  ;
+
+QUESTION_END
+  : '?' NEWLINE
   ;
 
 LINECOMMENT

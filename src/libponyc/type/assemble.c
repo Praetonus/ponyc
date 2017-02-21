@@ -311,7 +311,7 @@ ast_t* type_for_this(pass_opt_t* opt, ast_t* ast, token_id cap,
 
 ast_t* type_for_fun(ast_t* ast)
 {
-  AST_GET_CHILDREN(ast, cap, name, typeparams, params, result);
+  AST_GET_CHILDREN(ast, cap, name, typeparams, params, result, error);
   token_id fcap = ast_id(cap);
 
   if(fcap == TK_NONE)
@@ -327,7 +327,15 @@ ast_t* type_for_fun(ast_t* ast)
 
   BUILD(fun, ast,
     NODE(TK_FUNTYPE,
-      NODE(fcap) TREE(typeparams) TREE(clean_params) TREE(result)));
+      NODE(fcap)
+      TREE(typeparams)
+      TREE(clean_params)
+      TREE(result)));
+
+  if(ast_id(error) == TK_QUESTION)
+    ast_append(fun, ast_child(error));
+  else
+    ast_append(fun, ast_from(ast, TK_NONE));
 
   return fun;
 }

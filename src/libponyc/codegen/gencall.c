@@ -1137,14 +1137,14 @@ LLVMValueRef gencall_allocstruct(compile_t* c, reach_type_t* t)
   return result;
 }
 
-void gencall_throw(compile_t* c)
+void gencall_throw(compile_t* c, LLVMValueRef value)
 {
   LLVMValueRef func = LLVMGetNamedFunction(c->module, "pony_throw");
 
   if(c->frame->invoke_target != NULL)
-    invoke_fun(c, func, NULL, 0, "", false);
+    invoke_fun(c, func, &value, 1, "", false);
   else
-    LLVMBuildCall(c->builder, func, NULL, 0, "");
+    LLVMBuildCall(c->builder, func, &value, 1, "");
 
   LLVMBuildUnreachable(c->builder);
 }

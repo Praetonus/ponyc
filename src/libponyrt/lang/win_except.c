@@ -9,11 +9,10 @@ PONY_EXTERN_C_BEGIN
 
 static __declspec(thread) uintptr_t landing_pad;
 
-PONY_API void pony_throw()
+PONY_API void pony_throw(void* value)
 {
-  //Continuable exception with no arguments. RaiseException involves a kernel
-  //mode transition.
-  RaiseException(PONY_EXCEPTION_CLASS, 0, 0, NULL);
+  //Continuable exception. RaiseException involves a kernel mode transition.
+  RaiseException(PONY_EXCEPTION_CLASS, 0, 1, value);
 
   //Never reaches here, since exceptions are always handled.
   abort();
@@ -90,7 +89,8 @@ PONY_API EXCEPTION_DISPOSITION pony_personality_v0(EXCEPTION_RECORD *ExcRecord,
       return ExceptionContinueSearch;
 
     RtlUnwindEx(EstablisherFrame, (PVOID)landing_pad, ExcRecord,
-      NULL, ContextRecord, DispatcherContext->HistoryTable);
+      (void*)ExcRecord->ExceptionInformation,
+      ContextRecord, DispatcherContext->HistoryTable);
   }
 
   if(ExcRecord->ExceptionFlags & EXCEPTION_TARGET_UNWIND)

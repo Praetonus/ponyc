@@ -341,6 +341,37 @@ static ast_result_t check_method(pass_opt_t* opt, ast_t* method)
 }
 
 
+void expand_none_type(ast_t* ast)
+{
+  if(ast_id(ast) != TK_NONE)
+    return;
+
+  ast_setid(ast, TK_NOMINAL);
+
+  BUILD(pkg, ast, NONE);
+  BUILD(id, ast, ID("None"));
+  BUILD(typeargs, ast, NONE);
+  BUILD(cap, ast, NONE);
+  BUILD(eph, ast, NONE);
+
+  ast_add(ast, eph);
+  ast_add(ast, cap);
+  ast_add(ast, typeargs);
+  ast_add(ast, id);
+  ast_add(ast, pkg);
+}
+
+
+static ast_result_t sugar_errortype(ast_t* ast, size_t child_id)
+{
+  ast_t* error = ast_childidx(ast, child_id);
+  if(ast_id(error) == TK_QUESTION)
+    expand_none_type(ast_child(error));
+
+  return AST_OK;
+}
+
+
 static ast_result_t sugar_new(pass_opt_t* opt, ast_t* ast)
 {
   AST_GET_CHILDREN(ast, cap, id, typeparams, params, result);
@@ -366,6 +397,7 @@ static ast_result_t sugar_new(pass_opt_t* opt, ast_t* ast)
     ast_replace(&result, type_for_this(opt, ast, tcap, TK_EPHEMERAL, false));
   }
 
+  sugar_errortype(ast, 5);
   sugar_docstring(ast);
   return check_method(opt, ast);
 }
@@ -383,6 +415,7 @@ static ast_result_t sugar_be(pass_opt_t* opt, ast_t* ast)
     ast_replace(&result, type);
   }
 
+  sugar_errortype(ast, 5);
   sugar_docstring(ast);
   return check_method(opt, ast);
 }
@@ -423,6 +456,7 @@ void fun_defaults(ast_t* ast)
 static ast_result_t sugar_fun(pass_opt_t* opt, ast_t* ast)
 {
   fun_defaults(ast);
+  sugar_errortype(ast, 5);
   sugar_docstring(ast);
   return check_method(opt, ast);
 }
@@ -459,9 +493,9 @@ static ast_result_t sugar_return(pass_opt_t* opt, ast_t* ast)
 }
 
 
-static ast_result_t sugar_else(ast_t* ast)
+static ast_result_t sugar_else(ast_t* ast, size_t child_id)
 {
-  ast_t* else_clause = ast_childidx(ast, 2);
+  ast_t* else_clause = ast_childidx(ast, child_id);
   expand_none(else_clause, true);
   return AST_OK;
 }
@@ -1092,7 +1126,7 @@ static ast_result_t sugar_unop(ast_t** astp, const char* fn_name)
 
 static ast_result_t sugar_ffi(pass_opt_t* opt, ast_t* ast)
 {
-  AST_GET_CHILDREN(ast, id, typeargs, args, named_args);
+  AST_GET_CHILDREN(ast, id, typeargs, args, named_args, error);
 
   const char* name = ast_name(id);
   size_t len = ast_name_len(id);
@@ -1113,6 +1147,9 @@ static ast_result_t sugar_ffi(pass_opt_t* opt, ast_t* ast)
 
   ast_t* new_id = ast_from_string(id, stringtab_consume(new_name, len + 2));
   ast_replace(&id, new_id);
+
+  if(ast_id(error) == TK_QUESTION)
+    expand_none_type(ast_child(error));
 
   if(ast_id(ast) == TK_FFIDECL)
     return check_params(opt, args);
@@ -1166,7 +1203,7 @@ static ast_result_t sugar_ifdef(pass_opt_t* opt, ast_t* ast)
     return AST_ERROR;
   }
 
-  return sugar_else(ast);
+  return sugar_else(ast, 2);
 }
 
 
@@ -1268,8 +1305,12 @@ static ast_result_t sugar_lambdatype(pass_opt_t* opt, ast_t** astp)
   if(ast_id(ret_type) != TK_NONE)
     printbuf(buf, ": %s", ast_print_type(ret_type));
 
-  if(ast_id(error) != TK_NONE)
-    printbuf(buf, " ?");
+  if(ast_id(error) == TK_QUESTION)
+  {
+    ast_t* error_type = ast_child(error);
+    expand_none_type(error_type);
+    printbuf(buf, " ? %s", ast_print_type(error_type));
+  }
 
   printbuf(buf, "}");
 
@@ -1415,11 +1456,13 @@ ast_result_t pass_sugar(ast_t** astp, pass_opt_t* options)
     case TK_NEW:              return sugar_new(options, ast);
     case TK_BE:               return sugar_be(options, ast);
     case TK_FUN:              return sugar_fun(options, ast);
-    case TK_RETURN:           return sugar_return(options, ast);
+    case TK_RETURN:
+    case TK_ERROR:            return sugar_return(options, ast);
     case TK_IF:
     case TK_MATCH:
     case TK_WHILE:
-    case TK_REPEAT:           return sugar_else(ast);
+    case TK_REPEAT:           return sugar_else(ast, 2);
+    case TK_ELSEMATCH:        return sugar_else(ast, 1);
     case TK_TRY:              return sugar_try(ast);
     case TK_FOR:              return sugar_for(options, astp);
     case TK_WITH:             return sugar_with(options, astp);
@@ -1465,6 +1508,7 @@ ast_result_t pass_sugar(ast_t** astp, pass_opt_t* options)
     case TK_USE:              return sugar_use(options, ast);
     case TK_SEMI:             return sugar_semi(options, astp);
     case TK_LAMBDATYPE:       return sugar_lambdatype(options, astp);
+    case TK_LAMBDA:           return sugar_errortype(ast, 6);
     case TK_LOCATION:         return sugar_location(options, astp);
     default:                  return AST_OK;
   }

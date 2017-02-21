@@ -232,11 +232,11 @@ TEST_F(SugarExprTest, PartialRaisesError)
 
   const char* full_form =
     "trait T\n"
-    "  fun f(): U32 ?\n"
+    "  fun f(): U32 ? None\n"
 
     "class Foo\n"
     "  fun f(x: T) =>\n"
-    "    {box()($1 = x): U32 ? => $1.f() }";
+    "    {box()($1 = x): U32 ? None => $1.f() }";
 
   TEST_EQUIV(short_form, full_form);
 }
@@ -372,7 +372,7 @@ TEST_F(SugarExprTest, LambdaThrow)
     "class Foo\n"
     "  fun f() =>\n"
     "    object\n"
-    "      fun apply() ? => error\n"
+    "      fun apply() ? => error None\n"
     "    end";
 
   TEST_EQUIV(short_form, full_form);

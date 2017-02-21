@@ -5,7 +5,7 @@
 
 PONY_EXTERN_C_BEGIN
 
-PONY_API void pony_throw();
+PONY_API void pony_throw(void* value);
 
 PONY_EXTERN_C_END
 

@@ -224,8 +224,16 @@ DEF(typelist);
   WHILE(TK_COMMA, RULE("parameter type", type));
   DONE();
 
+// QUESTION [type]
+DEF(errortype);
+  PRINT_INLINE();
+  TOKEN(NULL, TK_QUESTION, TK_QUESTION_END);
+  MAP_ID(TK_QUESTION_END, TK_QUESTION);
+  OPT RULE("error type", type);
+  DONE();
+
 // LBRACE [CAP] [ID] [typeparams] (LPAREN | LPAREN_NEW) [typelist] RPAREN
-// [COLON type] [QUESTION] RBRACE [CAP] [EPHEMERAL | ALIASED]
+// [COLON type] [errortype] RBRACE [CAP] [EPHEMERAL | ALIASED]
 DEF(lambdatype);
   AST_NODE(TK_LAMBDATYPE);
   SKIP(NULL, TK_LBRACE);
@@ -236,7 +244,7 @@ DEF(lambdatype);
   OPT RULE("parameters", typelist);
   SKIP(NULL, TK_RPAREN);
   IF(TK_COLON, RULE("return type", type));
-  OPT TOKEN(NULL, TK_QUESTION);
+  OPT RULE("error type", errortype);
   SKIP(NULL, TK_RBRACE);
   OPT RULE("capability", cap, gencap);
   OPT TOKEN(NULL, TK_EPHEMERAL, TK_ALIASED);
@@ -327,7 +335,7 @@ DEF(lambdacaptures);
   DONE();
 
 // LAMBDA [annotations] [CAP] [ID] [typeparams] (LPAREN | LPAREN_NEW) [params]
-// RPAREN [lambdacaptures] [COLON type] [QUESTION] ARROW rawseq END
+// RPAREN [lambdacaptures] [COLON type] [errortype] ARROW rawseq END
 DEF(oldlambda);
   PRINT_INLINE();
   TOKEN(NULL, TK_LAMBDA);
@@ -340,7 +348,7 @@ DEF(oldlambda);
   SKIP(NULL, TK_RPAREN);
   OPT RULE("captures", lambdacaptures);
   IF(TK_COLON, RULE("return type", type));
-  OPT TOKEN(NULL, TK_QUESTION);
+  OPT RULE("error type", errortype);
   SKIP(NULL, TK_DBLARROW);
   RULE("lambda body", rawseq);
   TERMINATE("lambda expression", TK_END);
@@ -352,7 +360,7 @@ DEF(oldlambda);
   DONE();
 
 // LBRACE [annotations] [CAP] [ID] [typeparams] (LPAREN | LPAREN_NEW) [params]
-// RPAREN [lambdacaptures] [COLON type] [QUESTION] ARROW rawseq RBRACE [CAP]
+// RPAREN [lambdacaptures] [COLON type] [errortype] ARROW rawseq RBRACE [CAP]
 DEF(lambda);
   PRINT_INLINE();
   AST_NODE(TK_LAMBDA);
@@ -366,7 +374,7 @@ DEF(lambda);
   SKIP(NULL, TK_RPAREN);
   OPT RULE("captures", lambdacaptures);
   IF(TK_COLON, RULE("return type", type));
-  OPT TOKEN(NULL, TK_QUESTION);
+  OPT RULE("error type", errortype);
   SKIP(NULL, TK_DBLARROW);
   RULE("lambda body", rawseq);
   TERMINATE("lambda expression", TK_RBRACE);
@@ -454,8 +462,17 @@ DEF(location);
   TOKEN(NULL, TK_LOCATION);
   DONE();
 
+// QUESTION [type]
+DEF(errortype_endl);
+  PRINT_INLINE();
+  AST_NODE(TK_QUESTION);
+  IFELSE(TK_QUESTION,
+    OPT RULE("error type", type),
+    AST_NODE(TK_NONE); SKIP(NULL, TK_QUESTION_END));
+  DONE();
+
 // AT (ID | STRING) typeargs (LPAREN | LPAREN_NEW) [positional] RPAREN
-// [QUESTION]
+// [errortype_endl]
 DEF(ffi);
   PRINT_INLINE();
   TOKEN(NULL, TK_AT);
@@ -466,7 +483,7 @@ DEF(ffi);
   OPT RULE("ffi arguments", positional);
   OPT RULE("ffi arguments", named);
   TERMINATE("ffi arguments", TK_RPAREN);
-  OPT TOKEN(NULL, TK_QUESTION);
+  OPT RULE("error type", errortype_endl);
   DONE();
 
 // ref | this | literal | tuple | array | object | lambda | ffi | location
@@ -708,6 +725,22 @@ DEF(match);
   TERMINATE("match expression", TK_END);
   DONE();
 
+// ELSEERROR
+DEF(elseerror);
+  PRINT_INLINE();
+  TOKEN(NULL, TK_ELSEERROR);
+  DONE();
+
+// ELSEMATCH [annotations] cases [(ELSE annotatedseq | elseerror)]
+DEF(elsematch);
+  PRINT_INLINE();
+  TOKEN(NULL, TK_ELSEMATCH);
+  ANNOTATE(annotations);
+  SCOPE();
+  RULE("cases", cases);
+  OPT RULE("else clause", elseclause, elseerror);
+  DONE();
+
 // WHILE [annotations] rawseq DO seq [ELSE annotatedseq] END
 DEF(whileloop);
   PRINT_INLINE();
@@ -791,26 +824,28 @@ DEF(with);
   TERMINATE("with expression", TK_END);
   DONE();
 
-// TRY [annotations] seq [ELSE annotatedseq] [THEN annotatedseq] END
+// TRY [annotations] seq [(ELSE annotatedseq | elsematch | elseerror)]
+// [THEN annotatedseq] END
 DEF(try_block);
   PRINT_INLINE();
   TOKEN(NULL, TK_TRY);
   ANNOTATE(annotations);
   RULE("try body", seq);
-  IF(TK_ELSE, RULE("try else body", annotatedseq));
-  IF(TK_THEN, RULE("try then body", annotatedseq));
+  OPT RULE("try else clause", elseclause, elsematch, elseerror);
+  IF(TK_THEN, RULE("try then clause", annotatedseq));
   TERMINATE("try expression", TK_END);
   DONE();
 
-// $TRY_NO_CHECK [annotations] seq [ELSE annotatedseq] [THEN annotatedseq] END
+// $TRY_NO_CHECK [annotations] seq [(ELSE annotatedseq | elsematch | elseerror)]
+// [THEN annotatedseq] END
 DEF(test_try_block);
   PRINT_INLINE();
   TOKEN(NULL, TK_TEST_TRY_NO_CHECK);
   ANNOTATE(annotations);
   MAP_ID(TK_TEST_TRY_NO_CHECK, TK_TRY_NO_CHECK);
   RULE("try body", seq);
-  IF(TK_ELSE, RULE("try else body", annotatedseq));
-  IF(TK_THEN, RULE("try then body", annotatedseq));
+  OPT RULE("try else clause", elseclause, elsematch, elseerror);
+  IF(TK_THEN, RULE("try then clause", annotatedseq));
   TERMINATE("try expression", TK_END);
   DONE();
 
@@ -963,7 +998,8 @@ DEF(nextassignment);
   OPT_NO_DFLT RULE("value", assignop);
   DONE();
 
-// RETURN | BREAK | CONTINUE | ERROR | COMPILE_INTRINSIC | COMPILE_ERROR
+// (RETURN | BREAK | CONTINUE | ERROR | COMPILE_INTRINSIC | COMPILE_ERROR)
+// [rawseq]
 DEF(jump);
   TOKEN("statement", TK_RETURN, TK_BREAK, TK_CONTINUE, TK_ERROR,
     TK_COMPILE_INTRINSIC, TK_COMPILE_ERROR);
@@ -1032,7 +1068,7 @@ DEF(annotatedseq);
   DONE();
 
 // (FUN | BE | NEW) [annotations] [CAP] ID [typeparams] (LPAREN | LPAREN_NEW)
-// [params] RPAREN [COLON type] [QUESTION] [ARROW rawseq]
+// [params] RPAREN [COLON type] [errortype] [ARROW rawseq]
 DEF(method);
   TOKEN(NULL, TK_FUN, TK_BE, TK_NEW);
   ANNOTATE(annotations);
@@ -1044,7 +1080,7 @@ DEF(method);
   OPT RULE("parameters", params);
   SKIP(NULL, TK_RPAREN);
   IF(TK_COLON, RULE("return type", type));
-  OPT TOKEN(NULL, TK_QUESTION);
+  OPT RULE("error type", errortype);
   OPT TOKEN(NULL, TK_STRING);
   IF(TK_IF, RULE("guard expression", rawseq));
   IF(TK_DBLARROW, RULE("method body", rawseq));
@@ -1098,7 +1134,7 @@ DEF(use_uri);
   TOKEN(NULL, TK_STRING);
   DONE();
 
-// AT (ID | STRING) typeparams (LPAREN | LPAREN_NEW) [params] RPAREN [QUESTION]
+// AT (ID | STRING) typeparams (LPAREN | LPAREN_NEW) [params] RPAREN [errortype]
 DEF(use_ffi);
   TOKEN(NULL, TK_AT);
   MAP_ID(TK_AT, TK_FFIDECL);
@@ -1109,7 +1145,7 @@ DEF(use_ffi);
   OPT RULE("ffi parameters", params);
   AST_NODE(TK_NONE);  // Named parameters
   SKIP(NULL, TK_RPAREN);
-  OPT TOKEN(NULL, TK_QUESTION);
+  OPT RULE("error type", errortype);
   DONE();
 
 // ID ASSIGN

@@ -20,6 +20,7 @@ PONY_EXTERN_C_BEGIN
 
 static size_t desc_table_size = 0;
 static pony_type_t** desc_table = NULL;
+void* none_inst = NULL;
 
 PONY_EXTERN_C_END
 
@@ -79,6 +80,7 @@ bool ponyint_serialise_setup()
 #if defined(PLATFORM_IS_POSIX_BASED)
   void* tbl_size_sym = dlsym(RTLD_DEFAULT, "__DescTableSize");
   void* tbl_sym = dlsym(RTLD_DEFAULT, "__DescTable");
+  void* none_sym = dlsym(RTLD_DEFAULT, "None_Inst");
 #else
   HMODULE program = GetModuleHandle(NULL);
 
@@ -87,12 +89,14 @@ bool ponyint_serialise_setup()
 
   void* tbl_size_sym = (void*)GetProcAddress(program, "__DescTableSize");
   void* tbl_sym = (void*)GetProcAddress(program, "__DescTable");
+  void* none_sym = (void*)GetProcAddress(program, "None_Inst");
 #endif
-  if((tbl_size_sym == NULL) || (tbl_sym == NULL))
+  if((tbl_size_sym == NULL) || (tbl_sym == NULL) || (none_sym == NULL))
     return false;
 
   desc_table_size = *(size_t*)tbl_size_sym;
   desc_table = (pony_type_t**)tbl_sym;
+  none_inst = none_sym;
 
   return true;
 }
@@ -105,7 +109,7 @@ void ponyint_serialise_object(pony_ctx_t* ctx, void* p, pony_type_t* t,
     // A type without a serialisation function raises an error.
     // This applies to Pointer[A] and MaybePointer[A].
     serialise_cleanup(ctx);
-    pony_throw();
+    pony_throw(none_inst);
     return;
   }
 
@@ -145,7 +149,7 @@ void ponyint_serialise_actor(pony_ctx_t* ctx, pony_actor_t* actor)
   (void)ctx;
   (void)actor;
   serialise_cleanup(ctx);
-  pony_throw();
+  pony_throw(none_inst);
 }
 
 PONY_API void pony_serialise_reserve(pony_ctx_t* ctx, void* p, size_t size)
@@ -254,7 +258,7 @@ PONY_API void* pony_deserialise_offset(pony_ctx_t* ctx, pony_type_t* t,
     if((offset + sizeof(uintptr_t)) > ctx->serialise_size)
     {
       serialise_cleanup(ctx);
-      pony_throw();
+      pony_throw(none_inst);
     }
 
     // Turn the type id into a descriptor pointer.
@@ -270,7 +274,7 @@ PONY_API void* pony_deserialise_offset(pony_ctx_t* ctx, pony_type_t* t,
   if((offset + t->size) > ctx->serialise_size)
   {
     serialise_cleanup(ctx);
-    pony_throw();
+    pony_throw(none_inst);
   }
 
   // Allocate the object, memcpy to it.
@@ -297,7 +301,7 @@ PONY_API void* pony_deserialise_block(pony_ctx_t* ctx, uintptr_t offset,
   if((offset + size) > ctx->serialise_size)
   {
     serialise_cleanup(ctx);
-    pony_throw();
+    pony_throw(none_inst);
   }
 
   void* block = pony_alloc(ctx, size);

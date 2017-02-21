@@ -14,7 +14,13 @@ PONY_EXTERN_C_BEGIN
 #include <stdio.h>
 #endif
 
-static __thread struct _Unwind_Exception exception;
+typedef struct pony_exception_t
+{
+  struct _Unwind_Exception unwind_exception;
+  void* value;
+} pony_exception_t;
+
+static __thread pony_exception_t local_exception;
 static __thread uintptr_t landing_pad;
 
 static void exception_cleanup(_Unwind_Reason_Code reason,
@@ -24,15 +30,17 @@ static void exception_cleanup(_Unwind_Reason_Code reason,
   (void)exception;
 }
 
-PONY_API void pony_throw()
+PONY_API void pony_throw(void* value)
 {
+  struct _Unwind_Exception* ue = &local_exception.unwind_exception;
 #ifdef PLATFORM_IS_ARM
-  memcpy(exception.exception_class, "Pony\0\0\0\0", 8);
+  memcpy(ue->exception_class, "Pony\0\0\0\0", 8);
 #else
-  exception.exception_class = 0x506F6E7900000000; // "Pony"
+  ue->exception_class = 0x506F6E7900000000; // "Pony"
 #endif
-  exception.exception_cleanup = exception_cleanup;
-  _Unwind_RaiseException(&exception);
+  ue->exception_cleanup = exception_cleanup;
+  local_exception.value = value;
+  _Unwind_RaiseException(ue);
 
   abort();
 }
@@ -41,7 +49,7 @@ static void set_registers(struct _Unwind_Exception* exception,
   struct _Unwind_Context* context)
 {
   _Unwind_SetGR(context, __builtin_eh_return_data_regno(0),
-    (uintptr_t)exception);
+    (uintptr_t)((pony_exception_t*)exception)->value);
   _Unwind_SetGR(context, __builtin_eh_return_data_regno(1), 0);
   _Unwind_SetIP(context, landing_pad);
 }

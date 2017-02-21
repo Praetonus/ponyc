@@ -16,7 +16,9 @@ bool expr_recover(pass_opt_t* opt, ast_t* ast);
 bool expr_break(pass_opt_t* opt, ast_t* ast);
 bool expr_continue(pass_opt_t* opt, ast_t* ast);
 bool expr_return(pass_opt_t* opt, ast_t* ast);
+void partial_add_type(pass_opt_t* opt, ast_t* ast, ast_t* type);
 bool expr_error(pass_opt_t* opt, ast_t* ast);
+bool expr_elseerror(pass_opt_t* opt, ast_t* ast);
 bool expr_compile_error(pass_opt_t* opt, ast_t* ast);
 bool expr_location(pass_opt_t* opt, ast_t* ast);
 

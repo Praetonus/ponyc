@@ -178,8 +178,10 @@ static const lextoken_t keywords[] =
   { "match", TK_MATCH },
   { "where", TK_WHERE },
   { "try", TK_TRY },
+  { "elsematch", TK_ELSEMATCH },
   { "with", TK_WITH },
   { "error", TK_ERROR },
+  { "elseerror", TK_ELSEERROR },
   { "compile_error", TK_COMPILE_ERROR },
 
   { "not", TK_NOT },
@@ -1104,6 +1106,21 @@ static size_t read_id(lexer_t* lexer)
 }
 
 
+// Return whether the remaining characters on a line are all whitespace.
+static bool is_endline(lexer_t* lexer)
+{
+  for(size_t i = 1; ; i++)
+  {
+    char cur = lookn(lexer, i);
+    if((cur == '\0') || (cur == '\n'))
+      return true;
+
+    if(!isspace(cur))
+      return false;
+  }
+}
+
+
 // Process a keyword or identifier, possibly with a special prefix (eg '#').
 // Any prefix must have been consumed.
 // If no keyword is found the allow_identifiers parameter specifies whether an
@@ -1190,6 +1207,18 @@ static token_id newline_symbols(token_id raw_token, bool newline)
 }
 
 
+// Modify the gived token to its endline form. Doesn't check for actual end of
+// line in order to be efficient.
+static token_id endline_symbols(token_id raw_token)
+{
+  switch(raw_token)
+  {
+    case TK_QUESTION: return TK_QUESTION_END;
+    default:          return raw_token;
+  }
+}
+
+
 // Process a symbol the leading character of which has been seen, but not
 // consumed
 static token_t* symbol(lexer_t* lexer)
@@ -1208,7 +1237,13 @@ static token_t* symbol(lexer_t* lexer)
       if(symbol[i] == '\0')
       {
         consume_chars(lexer, i);
-        return make_token(lexer, newline_symbols(p->id, lexer->newline));
+
+        token_id tok = newline_symbols(p->id, lexer->newline);
+        token_id tok_endl = endline_symbols(tok);
+        if(tok != tok_endl)
+          return make_token(lexer, is_endline(lexer) ? tok_endl : tok);
+
+        return make_token(lexer, tok);
       }
     }
   }

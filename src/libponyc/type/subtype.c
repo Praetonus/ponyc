@@ -288,16 +288,33 @@ static bool is_reified_fun_sub_fun(ast_t* sub, ast_t* super,
   }
 
   // Covariant throws.
-  if((ast_id(sub_throws) == TK_QUESTION) &&
-    (ast_id(super_throws) != TK_QUESTION))
+  if(ast_id(sub_throws) == TK_QUESTION)
   {
-    if(errorf != NULL)
+    if(ast_id(super_throws) != TK_QUESTION)
     {
-      ast_error_frame(errorf, sub,
-        "a partial function is not a subtype of a total function");
+      if(errorf != NULL)
+      {
+        ast_error_frame(errorf, sub,
+          "a partial function is not a subtype of a total function");
+      }
+
+      return false;
     }
 
-    return false;
+    // Covariant error type.
+    ast_t* sub_error = ast_child(sub_throws);
+    ast_t* super_error = ast_child(super_throws);
+    if(!is_subtype(sub_error, super_error, errorf, opt))
+    {
+      if(errorf != NULL)
+      {
+        ast_error_frame(errorf, sub,
+          "error type %s is not a subtype of %s",
+          ast_print_type(sub_error), ast_print_type(super_error));
+      }
+
+      return false;
+    }
   }
 
   return true;

@@ -576,7 +576,11 @@ static bool method_call(pass_opt_t* opt, ast_t* ast)
   if(is_typecheck_error(type))
     return false;
 
-  AST_GET_CHILDREN(type, cap, typeparams, params, result);
+  AST_GET_CHILDREN(type, cap, typeparams, params, result, error);
+
+  if(ast_id(error) != TK_NONE)
+    partial_add_type(opt, ast, error);
+
   ast_settype(ast, result);
 
   return true;
@@ -682,7 +686,7 @@ static bool partial_application(pass_opt_t* opt, ast_t** astp)
     positional);
   AST_GET_CHILDREN(type, cap, type_params, target_params, result);
 
-  token_id can_error = ast_id(ast_childidx(method_def, 5));
+  ast_t* can_error = ast_childidx(method_def, 5);
   const char* recv_name = package_hygienic_id(t);
 
   // Build captures. We always have at least one capture, for receiver.
@@ -788,7 +792,7 @@ static bool partial_application(pass_opt_t* opt, ast_t** astp)
       TREE(lambda_params)
       TREE(captures)
       TREE(sanitise_type(result))
-      NODE(can_error)
+      TREE(can_error)
       NODE(TK_SEQ,
         NODE(TK_CALL,
           TREE(lambda_call_args)

@@ -692,8 +692,23 @@ static ast_t* add_case_method(ast_t* match_method, ast_t* case_method,
   }
 
   if(ast_id(case_question) == TK_QUESTION)
+  {
     // If any case throws the match does too.
-    ast_setid(match_question, TK_QUESTION);
+    expand_none_type(ast_child(case_question));
+    if(ast_id(match_question) == TK_NONE)
+    {
+      ast_setid(match_question, TK_QUESTION);
+      ast_t* error_type = ast_pop(case_question);
+      ast_add(match_question, error_type);
+    } else {
+      ast_t* case_error_type = ast_child(case_question);
+      ast_t* match_error_type = ast_child(match_question);
+      REPLACE(&match_error_type,
+        NODE(TK_UNIONTYPE,
+        TREE(match_error_type)
+        TREE(case_error_type)));
+    }
+  }
 
   if(!process_t_params(match_t_params, case_t_params, opt))
     ok = false;

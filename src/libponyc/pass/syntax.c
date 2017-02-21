@@ -513,16 +513,12 @@ static ast_result_t syntax_nominal(pass_opt_t* opt, ast_t* ast)
 }
 
 
-static ast_result_t syntax_match(pass_opt_t* opt, ast_t* ast)
+static ast_result_t syntax_cases(pass_opt_t* opt, ast_t* ast)
 {
   assert(ast != NULL);
 
   // The last case must have a body
-  ast_t* cases = ast_childidx(ast, 1);
-  assert(cases != NULL);
-  assert(ast_id(cases) == TK_CASES);
-
-  ast_t* case_ast = ast_child(cases);
+  ast_t* case_ast = ast_child(ast);
 
   if(case_ast == NULL)  // There are no bodies
     return AST_OK;
@@ -1136,15 +1132,15 @@ ast_result_t pass_syntax(ast_t** astp, pass_opt_t* options)
     case TK_THISTYPE:   r = syntax_thistype(options, ast); break;
     case TK_ARROW:      r = syntax_arrowtype(options, ast); break;
     case TK_NOMINAL:    r = syntax_nominal(options, ast); break;
-    case TK_MATCH:      r = syntax_match(options, ast); break;
+    case TK_CASES:      r = syntax_cases(options, ast); break;
     case TK_FFIDECL:    r = syntax_ffi(options, ast, false); break;
     case TK_FFICALL:    r = syntax_ffi(options, ast, true); break;
     case TK_ELLIPSIS:   r = syntax_ellipsis(options, ast); break;
     case TK_CONSUME:    r = syntax_consume(options, ast); break;
     case TK_RETURN:
-    case TK_BREAK:      r = syntax_return(options, ast, 1); break;
-    case TK_CONTINUE:
-    case TK_ERROR:      r = syntax_return(options, ast, 0); break;
+    case TK_BREAK:
+    case TK_ERROR:      r = syntax_return(options, ast, 1); break;
+    case TK_CONTINUE:   r = syntax_return(options, ast, 0); break;
     case TK_LET:
     case TK_VAR:        r = syntax_local(options, ast); break;
     case TK_EMBED:      r = syntax_embed(options, ast); break;

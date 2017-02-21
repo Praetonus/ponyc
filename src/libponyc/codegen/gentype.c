@@ -370,7 +370,13 @@ static void make_global_instance(compile_t* c, reach_type_t* t)
   t->instance = LLVMAddGlobal(c->module, t->structure, inst_name);
   LLVMSetInitializer(t->instance, value);
   LLVMSetGlobalConstant(t->instance, true);
-  LLVMSetLinkage(t->instance, LLVMPrivateLinkage);
+
+  // None_Inst is used by the runtime and so must have public linkage and be
+  // exported.
+  if(t->name == stringtab("None"))
+    LLVMSetDLLStorageClass(t->instance, LLVMDLLExportStorageClass);
+  else
+    LLVMSetLinkage(t->instance, LLVMPrivateLinkage);
 }
 
 static void make_dispatch(compile_t* c, reach_type_t* t)

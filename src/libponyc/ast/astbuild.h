@@ -36,6 +36,8 @@
     ast_t* node = NULL; \
     __VA_ARGS__ \
     var = parent; \
+    (void)last_sibling; \
+    (void)node; \
   }
 
 /** Builds an AST to replace the specified existing tree.
@@ -49,6 +51,8 @@
     ast_t* node = NULL; \
     __VA_ARGS__ \
     ast_replace(existing, parent); \
+    (void)last_sibling; \
+    (void)node; \
   }
 
 /** Add an existing subtree.

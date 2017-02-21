@@ -1,4 +1,5 @@
 #include "call.h"
+#include "control.h"
 #include "../pkg/package.h"
 #include "../type/lookup.h"
 #include <assert.h>
@@ -21,9 +22,13 @@ static bool check_partial_function_call(pass_opt_t* opt, ast_t* ast)
   assert(ast_id(method_def) == TK_FUN || ast_id(method_def) == TK_BE ||
     ast_id(method_def) == TK_NEW);
 
-  token_id can_error = ast_id(ast_childidx(method_def, 5));
-  if(can_error == TK_QUESTION)
+  ast_t* error = ast_childidx(method_def, 5);
+  if(ast_id(error) == TK_QUESTION)
+  {
     ast_seterror(ast);
+    if(!verify_partial_type(opt, ast, ast_child(error)))
+      return false;
+  }
 
   ast_free_unattached(method_def);
 
@@ -39,9 +44,14 @@ static bool check_partial_ffi_call(pass_opt_t* opt, ast_t* ast)
   // The expr pass (expr_ffi) should have stored the declaration here, if found.
   ast_t* decl = (ast_t*)ast_data(ast);
 
-  if(decl == NULL) {
+  if(decl == NULL)
+  {
     if(ast_id(call_error) == TK_QUESTION)
+    {
       ast_seterror(ast);
+      if(!verify_partial_type(opt, ast, ast_child(call_error)))
+        return false;
+    }
   } else {
     assert(ast_id(decl) == TK_FFIDECL);
     AST_GET_CHILDREN(decl, decl_name, decl_ret_typeargs, params, named_params,
@@ -49,7 +59,13 @@ static bool check_partial_ffi_call(pass_opt_t* opt, ast_t* ast)
 
     if((ast_id(decl_error) == TK_QUESTION) ||
       (ast_id(call_error) == TK_QUESTION))
+    {
       ast_seterror(ast);
+      ast_t* error_type = ast_child(
+        (ast_id(decl_error) == TK_QUESTION) ? decl_error : call_error);
+      if(!verify_partial_type(opt, ast, error_type))
+        return false;
+    }
 
     if((ast_id(decl_error) == TK_NONE) && (ast_id(call_error) != TK_NONE))
     {

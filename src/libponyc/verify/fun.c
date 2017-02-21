@@ -1,4 +1,6 @@
 #include "fun.h"
+#include "control.h"
+#include "../type/assemble.h"
 #include "../type/subtype.h"
 #include <string.h>
 #include <assert.h>
@@ -189,36 +191,12 @@ static bool verify_any_final(pass_opt_t* opt, ast_t* ast)
   return ok;
 }
 
-static bool show_partiality(pass_opt_t* opt, ast_t* ast)
-{
-  ast_t* child = ast_child(ast);
-  bool found = false;
-
-  while(child != NULL)
-  {
-    if(ast_canerror(child))
-      found |= show_partiality(opt, child);
-
-    child = ast_sibling(child);
-  }
-
-  if(found)
-    return true;
-
-  if(ast_canerror(ast))
-  {
-    ast_error_continue(opt->check.errors, ast, "an error can be raised here");
-    return true;
-  }
-
-  return false;
-}
 
 bool verify_fun(pass_opt_t* opt, ast_t* ast)
 {
   assert((ast_id(ast) == TK_BE) || (ast_id(ast) == TK_FUN) ||
     (ast_id(ast) == TK_NEW));
-  AST_GET_CHILDREN(ast, cap, id, typeparams, params, type, can_error, body);
+  AST_GET_CHILDREN(ast, cap, id, typeparams, params, type, error, body);
 
   // Run checks tailored to specific kinds of methods, if any apply.
   if(!verify_main_create(opt, ast) ||
@@ -227,7 +205,7 @@ bool verify_fun(pass_opt_t* opt, ast_t* ast)
     return false;
 
   // Check partial functions.
-  if(ast_id(can_error) == TK_QUESTION)
+  if(ast_id(error) == TK_QUESTION)
   {
     // If the function is marked as partial, it must have the potential
     // to raise an error somewhere in the body. This check is skipped for
@@ -243,24 +221,43 @@ bool verify_fun(pass_opt_t* opt, ast_t* ast)
       !ast_canerror(body) &&
       (ast_id(ast_type(body)) != TK_COMPILE_INTRINSIC))
     {
-      ast_error(opt->check.errors, can_error, "function signature is marked as "
+      ast_error(opt->check.errors, error, "function signature is marked as "
         "partial but the function body cannot raise an error");
       return false;
     }
+
+    // The error type must be a subtype of Any val.
+    ast_t* error_type = ast_child(error);
+    ast_t* any_val = type_builtin(opt, error_type, "Any");
+    ast_setid(ast_childidx(any_val, 3), TK_VAL);
+
+    errorframe_t info = NULL;
+    if(!is_subtype(error_type, any_val, &info, opt))
+    {
+      errorframe_t frame = NULL;
+      ast_error_frame(&frame, error_type, "error type must be a subtype of "
+        "Any val");
+      errorframe_append(&frame, &info);
+      errorframe_report(&frame, opt->check.errors);
+      ast_free_unattached(any_val);
+      return false;
+    }
+
+    ast_free_unattached(any_val);
   } else {
     // If the function is not marked as partial, it must never raise an error.
     if(ast_canerror(body))
     {
       if(ast_id(ast) == TK_BE)
       {
-        ast_error(opt->check.errors, can_error, "a behaviour must handle any "
+        ast_error(opt->check.errors, error, "a behaviour must handle any "
           "potential error");
       } else if((ast_id(ast) == TK_NEW) &&
         (ast_id(opt->check.frame->type) == TK_ACTOR)) {
-        ast_error(opt->check.errors, can_error, "an actor constructor must "
-          "handle any potential error");
+        ast_error(opt->check.errors, error, "an actor constructor must handle "
+          "any potential error");
       } else {
-        ast_error(opt->check.errors, can_error, "function signature is not "
+        ast_error(opt->check.errors, error, "function signature is not "
           "marked as partial but the function body can raise an error");
       }
       show_partiality(opt, body);

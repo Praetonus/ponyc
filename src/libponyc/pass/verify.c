@@ -13,16 +13,18 @@ ast_result_t pass_verify(ast_t** astp, pass_opt_t* options)
   {
     case TK_FUN:
     case TK_NEW:
-    case TK_BE:           r = verify_fun(options, ast); break;
+    case TK_BE:            r = verify_fun(options, ast); break;
     case TK_FUNREF:
     case TK_FUNCHAIN:
-    case TK_NEWREF:       r = verify_function_call(options, ast); break;
+    case TK_NEWREF:        r = verify_function_call(options, ast); break;
     case TK_BEREF:
     case TK_BECHAIN:
-    case TK_NEWBEREF:     r = verify_behaviour_call(options, ast); break;
-    case TK_FFICALL:      r = verify_ffi_call(options, ast); break;
+    case TK_NEWBEREF:      r = verify_behaviour_call(options, ast); break;
+    case TK_FFICALL:       r = verify_ffi_call(options, ast); break;
     case TK_TRY:
-    case TK_TRY_NO_CHECK: r = verify_try(options, ast); break;
+    case TK_TRY_NO_CHECK:  r = verify_try(options, ast); break;
+    case TK_ERROR:         r = verify_error(options, ast); break;
+    case TK_ELSEERROR:     r = verify_elseerror(options, ast); break;
     case TK_LETREF:
     case TK_VARREF:
     case TK_FLETREF:
@@ -33,6 +35,7 @@ ast_result_t pass_verify(ast_t** astp, pass_opt_t* options)
     case TK_TUPLE:
     case TK_ASSIGN:
     case TK_MATCH:
+    case TK_ELSEMATCH:
     case TK_CASES:
     case TK_CASE:
     case TK_IS:
@@ -48,8 +51,7 @@ ast_result_t pass_verify(ast_t** astp, pass_opt_t* options)
     case TK_POSITIONALARGS:
     case TK_NAMEDARGS:
     case TK_NAMEDARG:
-    case TK_UPDATEARG:    ast_inheritflags(ast); break;
-    case TK_ERROR:        ast_seterror(ast); break;
+    case TK_UPDATEARG:     ast_inheritflags(ast); break;
 
     default: {}
   }

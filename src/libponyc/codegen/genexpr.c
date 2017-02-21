@@ -73,6 +73,7 @@ LLVMValueRef gen_expr(compile_t* c, ast_t* ast)
       break;
 
     case TK_MATCH:
+    case TK_ELSEMATCH:
       ret = gen_match(c, ast);
       break;
 
@@ -121,6 +122,10 @@ LLVMValueRef gen_expr(compile_t* c, ast_t* ast)
 
     case TK_ERROR:
       ret = gen_error(c, ast);
+      break;
+
+    case TK_ELSEERROR:
+      ret = gen_elseerror(c, ast);
       break;
 
     case TK_IS:

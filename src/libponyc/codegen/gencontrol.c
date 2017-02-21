@@ -537,8 +537,8 @@ LLVMValueRef gen_try(compile_t* c, ast_t* ast)
   // Else block.
   LLVMPositionBuilderAtEnd(c->builder, else_block);
 
-  // The landing pad is marked as a cleanup, since exceptions are typeless and
-  // valueless. The first landing pad is always the destination.
+  // The landing pad is marked as a cleanup, since exceptions are typeless. The
+  // first landing pad is always the destination.
   LLVMTypeRef lp_elements[2];
   lp_elements[0] = c->void_ptr;
   lp_elements[1] = c->i32;
@@ -559,6 +559,11 @@ LLVMValueRef gen_try(compile_t* c, ast_t* ast)
 
   LLVMAddClause(landing, LLVMConstNull(c->void_ptr));
 
+  LLVMValueRef error = LLVMBuildExtractValue(c->builder, landing, 0, "");
+  error = LLVMBuildBitCast(c->builder, error, c->object_ptr, "");
+
+  codegen_pushtryelse(c, error);
+
   LLVMValueRef else_value = gen_expr(c, else_clause);
 
   if(else_value != GEN_NOVALUE)
@@ -577,6 +582,8 @@ LLVMValueRef gen_try(compile_t* c, ast_t* ast)
     else_block = LLVMGetInsertBlock(c->builder);
     LLVMBuildBr(c->builder, post_block);
   }
+
+  codegen_poptryelse(c);
 
   // If both sides return, we return a sentinel value.
   if(is_control_type(type))
@@ -603,6 +610,9 @@ LLVMValueRef gen_try(compile_t* c, ast_t* ast)
 
 LLVMValueRef gen_error(compile_t* c, ast_t* ast)
 {
+  ast_t* expr = ast_child(ast);
+  LLVMValueRef value = gen_expr(c, expr);
+
   size_t clause;
   ast_t* try_expr = ast_try_clause(ast, &clause);
 
@@ -610,9 +620,26 @@ LLVMValueRef gen_error(compile_t* c, ast_t* ast)
   if((try_expr != NULL) && (clause == 1))
     gen_expr(c, ast_childidx(try_expr, 2));
 
+  // Always box the value if it's a machine word.
+  value = gen_assign_cast(c, c->object_ptr, value, ast_type(expr));
   codegen_scope_lifetime_end(c);
   codegen_debugloc(c, ast);
-  gencall_throw(c);
+  gencall_throw(c, value);
+  codegen_debugloc(c, NULL);
+
+  return GEN_NOVALUE;
+}
+
+LLVMValueRef gen_elseerror(compile_t* c, ast_t* ast)
+{
+  (void)ast;
+
+  LLVMValueRef current_error = c->frame->current_error;
+  assert(current_error != NULL);
+
+  codegen_scope_lifetime_end(c);
+  codegen_debugloc(c, ast);
+  gencall_throw(c, current_error);
   codegen_debugloc(c, NULL);
 
   return GEN_NOVALUE;

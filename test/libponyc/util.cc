@@ -30,6 +30,7 @@ extern "C"
 {
   EXPORT_SYMBOL void* __DescTable;
   EXPORT_SYMBOL void* __DescTableSize;
+  EXPORT_SYMBOL void* None_Inst;
 }
 
 
@@ -90,6 +91,7 @@ static const char* _builtin =
   "  new _create() => None\n"
   "primitive None\n"
   "primitive Bool\n"
+  "interface tag Any\n"
   "class val String\n"
   "class Pointer[A]\n"
   "interface Seq[A]\n"
@@ -401,8 +403,10 @@ bool PassTest::run_program(int* exit_code)
   assert(compile != NULL);
 
   pony_exitcode(0);
-  jit_symbol_t symbols[] = {{"__DescTable", &__DescTable},
-    {"__DescTableSize", &__DescTableSize}};
+  jit_symbol_t symbols[] = {
+    {"__DescTable", &__DescTable},
+    {"__DescTableSize", &__DescTableSize},
+    {"NoneInst", &None_Inst}};
   return gen_jit_and_run(compile, exit_code, symbols, 2);
 }
 

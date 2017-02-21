@@ -59,9 +59,12 @@ bool expr_seq(pass_opt_t* opt, ast_t* ast)
 
       if(body == ast)
       {
-        // Push our consumes, but not defines, to the else clause.
-        ast_inheritbranch(else_clause, body);
-        ast_consolidate_branches(else_clause, 2);
+        if(ast_id(else_clause) != TK_ELSEERROR)
+        {
+          // Push our consumes, but not defines, to the else clause.
+          ast_inheritbranch(else_clause, body);
+          ast_consolidate_branches(else_clause, 2);
+        }
       } else if(else_clause == ast) {
         // Push our consumes, but not defines, to the then clause. This
         // includes the consumes from the body.
@@ -528,13 +531,70 @@ bool expr_return(pass_opt_t* opt, ast_t* ast)
   return ok;
 }
 
+void partial_add_type(pass_opt_t* opt, ast_t* ast, ast_t* type)
+{
+  ast_t* current;
+  ast_t* parent = ast;
+  bool walk = true;
+  while(walk)
+  {
+    current = parent;
+    parent = ast_parent(current);
+    while((ast_id(parent) != TK_TRY) && (ast_id(parent) != TK_TRY_NO_CHECK) &&
+      (parent != opt->check.frame->method))
+    {
+      current = parent;
+      parent = ast_parent(current);
+    }
+
+    if((ast_id(parent) == TK_TRY) || (ast_id(parent) == TK_TRY_NO_CHECK))
+    {
+      if(current == ast_child(parent))
+        walk = false;
+    } else {
+        walk = false;
+    }
+  }
+
+  token_id else_clause_id = ast_id(ast_sibling(current));
+  if((else_clause_id == TK_ELSEMATCH) ||(else_clause_id == TK_ELSEERROR))
+  {
+    ast_t* try_error_type = (ast_t*)ast_data(parent);
+    try_error_type = type_union(opt, try_error_type, type);
+    ast_setdata(parent, try_error_type);
+  }
+}
+
 bool expr_error(pass_opt_t* opt, ast_t* ast)
 {
   (void)opt;
   // error is always the last expression in a sequence
   assert(ast_sibling(ast) == NULL);
 
+  ast_t* type = ast_type(ast_child(ast));
+  if(is_type_literal(type))
+  {
+    ast_error(opt->check.errors, type, "cannot infer type of error literal");
+    return false;
+  }
+
+  partial_add_type(opt, ast, type);
+
   ast_settype(ast, ast_from(ast, TK_ERROR));
+  return true;
+}
+
+bool expr_elseerror(pass_opt_t* opt, ast_t* ast)
+{
+  ast_t* parent = ast_parent(ast);
+  if(ast_id(parent) == TK_ELSEMATCH)
+    parent = ast_parent(parent);
+
+  ast_t* errors = (ast_t*)ast_data(parent);
+  if(errors != NULL)
+    partial_add_type(opt, ast, errors);
+
+  ast_settype(ast, ast_from(ast, TK_ELSEERROR));
   return true;
 }
 

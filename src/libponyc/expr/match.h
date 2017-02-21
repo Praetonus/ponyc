@@ -8,6 +8,7 @@
 PONY_EXTERN_C_BEGIN
 
 bool expr_match(pass_opt_t* opt, ast_t* ast);
+bool expr_elsematch(pass_opt_t* opt, ast_t* ast);
 bool expr_cases(pass_opt_t* opt, ast_t* ast);
 bool expr_case(pass_opt_t* opt, ast_t* ast);
 bool expr_match_capture(pass_opt_t* opt, ast_t* ast);

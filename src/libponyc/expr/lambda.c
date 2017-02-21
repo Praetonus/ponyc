@@ -162,8 +162,8 @@ bool expr_lambda(pass_opt_t* opt, ast_t** astp)
   if(ast_id(ret_type) != TK_NONE)
     printbuf(buf, ": %s", ast_print_type(ret_type));
 
-  if(ast_id(raises) != TK_NONE)
-    printbuf(buf, " ?");
+  if(ast_id(raises) == TK_QUESTION)
+    printbuf(buf, " ? %s", ast_print_type(ast_child(raises)));
 
   printbuf(buf, "}");
 

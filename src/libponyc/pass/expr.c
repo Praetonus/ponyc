@@ -73,6 +73,7 @@ bool is_result_needed(ast_t* ast)
     case TK_CASES:
     case TK_TRY:
     case TK_TRY_NO_CHECK:
+    case TK_ELSEMATCH:
     case TK_RECOVER:
       // Only if parent needed.
       return is_result_needed(parent);
@@ -142,6 +143,7 @@ bool is_method_result(typecheck_t* t, ast_t* ast)
 
     case TK_CASES:
     case TK_RECOVER:
+    case TK_ELSEMATCH:
       // These can be results.
       break;
 
@@ -196,6 +198,7 @@ bool is_control_type(ast_t* type)
     case TK_IF:
     case TK_TRY:
     case TK_MATCH:
+    case TK_ELSEMATCH:
     case TK_CASES:
     case TK_WHILE:
     case TK_REPEAT:
@@ -203,6 +206,7 @@ bool is_control_type(ast_t* type)
     case TK_CONTINUE:
     case TK_RETURN:
     case TK_ERROR:
+    case TK_ELSEERROR:
     case TK_COMPILE_ERROR:
       return true;
 
@@ -273,6 +277,7 @@ ast_result_t pass_expr(ast_t** astp, pass_opt_t* options)
     case TK_TRY_NO_CHECK:
     case TK_TRY:        r = expr_try(options, ast); break;
     case TK_MATCH:      r = expr_match(options, ast); break;
+    case TK_ELSEMATCH:  r = expr_elsematch(options, ast); break;
     case TK_CASES:      r = expr_cases(options, ast); break;
     case TK_CASE:       r = expr_case(options, ast); break;
     case TK_MATCH_CAPTURE:
@@ -284,6 +289,7 @@ ast_result_t pass_expr(ast_t** astp, pass_opt_t* options)
     case TK_TRUE:
     case TK_FALSE:      r = expr_literal(options, ast, "Bool"); break;
     case TK_ERROR:      r = expr_error(options, ast); break;
+    case TK_ELSEERROR:  r = expr_elseerror(options, ast); break;
     case TK_COMPILE_ERROR:
                         r = expr_compile_error(options, ast); break;
     case TK_COMPILE_INTRINSIC:

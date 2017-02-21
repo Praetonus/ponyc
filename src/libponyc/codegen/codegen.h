@@ -76,6 +76,8 @@ typedef struct compile_frame_t
   LLVMBasicBlockRef continue_target;
   LLVMBasicBlockRef invoke_target;
 
+  LLVMValueRef current_error;
+
   compile_locals_t locals;
   LLVMMetadataRef di_file;
   LLVMMetadataRef di_scope;
@@ -254,6 +256,10 @@ void codegen_poploop(compile_t* c);
 void codegen_pushtry(compile_t* c, LLVMBasicBlockRef invoke_target);
 
 void codegen_poptry(compile_t* c);
+
+void codegen_pushtryelse(compile_t* c, LLVMValueRef landing);
+
+void codegen_poptryelse(compile_t* c);
 
 void codegen_debugloc(compile_t* c, ast_t* ast);
 

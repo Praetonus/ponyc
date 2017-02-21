@@ -261,7 +261,8 @@ static bool link_exe(compile_t* c, ast_t* program,
   const char* ldl = target_is_linux(c->opt->triple) ? "-ldl" : "";
   const char* export = target_is_linux(c->opt->triple) ?
     "-Wl,--export-dynamic-symbol=__DescTable "
-    "-Wl,--export-dynamic-symbol=__DescTableSize" : "-rdynamic";
+    "-Wl,--export-dynamic-symbol=__DescTableSize "
+    "-Wl,--export-dynamic-symbol=None_Inst" : "-rdynamic";
 
   size_t ld_len = 512 + strlen(file_exe) + strlen(file_o) + strlen(lib_args)
                   + strlen(arch) + strlen(mcx16_arg) + strlen(fuseld)

@@ -1360,11 +1360,11 @@ TEST_F(SugarTest, As)
     "use \"builtin\"\n"
     "class ref Foo\n"
     "  var create: U32\n"
-    "  fun box f(a: (Foo | Bar)): Foo ? =>\n"
+    "  fun box f(a: (Foo | Bar)): Foo ? None =>\n"
     "    match a\n"
     "    | $let $1: Foo ref => consume $aliased $1\n"
     "    else\n"
-    "      error\n"
+    "      error None\n"
     "    end";
 
   TEST_EQUIV(short_form, full_form);
@@ -1383,12 +1383,12 @@ TEST_F(SugarTest, AsTuple)
     "use \"builtin\"\n"
     "class ref Foo\n"
     "  var create: U32\n"
-    "  fun box f(a: (Foo, Bar)): (Foo, Bar) ? =>\n"
+    "  fun box f(a: (Foo, Bar)): (Foo, Bar) ? None =>\n"
     "    match a\n"
     "    | ($let $1: Foo ref, $let $2: Bar ref) =>\n"
     "      (consume $aliased $1, consume $aliased $2)\n"
     "    else\n"
-    "      error\n"
+    "      error None\n"
     "    end";
 
   TEST_EQUIV(short_form, full_form);
@@ -1407,13 +1407,13 @@ TEST_F(SugarTest, AsNestedTuple)
     "use \"builtin\"\n"
     "class ref Foo\n"
     "  var create: U32\n"
-    "  fun box f(a: (Foo, (Bar, Baz))): (Foo, (Bar, Baz)) ? =>\n"
+    "  fun box f(a: (Foo, (Bar, Baz))): (Foo, (Bar, Baz)) ? None =>\n"
     "    match a\n"
     "    | ($let $1: Foo ref, ($let $2: Bar ref, $let $3: Baz ref)) =>\n"
     "      (consume $aliased $1,\n"
     "        (consume $aliased $2, consume $aliased $3))\n"
     "    else\n"
-    "      error\n"
+    "      error None\n"
     "    end";
 
   TEST_EQUIV(short_form, full_form);
@@ -1443,12 +1443,12 @@ TEST_F(SugarTest, AsDontCare2Tuple)
     "use \"builtin\"\n"
     "class ref Foo\n"
     "  var create: U32\n"
-    "  fun box f(a: (Foo, Bar)): Foo ? =>\n"
+    "  fun box f(a: (Foo, Bar)): Foo ? None =>\n"
     "    match a\n"
     "    | ($let $1: Foo ref, _) =>\n"
     "      consume $aliased $1\n"
     "    else\n"
-    "      error\n"
+    "      error None\n"
     "    end";
 
   TEST_EQUIV(short_form, full_form);
@@ -1467,12 +1467,12 @@ TEST_F(SugarTest, AsDontCareMultiTuple)
     "use \"builtin\"\n"
     "class ref Foo\n"
     "  var create: U32\n"
-    "  fun box f(a: (Foo, Bar, Baz)): (Foo, Baz) ? =>\n"
+    "  fun box f(a: (Foo, Bar, Baz)): (Foo, Baz) ? None =>\n"
     "    match a\n"
     "    | ($let $1: Foo ref, _, $let $2: Baz ref) =>\n"
     "      (consume $aliased $1, consume $aliased $2)\n"
     "    else\n"
-    "      error\n"
+    "      error None\n"
     "    end";
 
   TEST_EQUIV(short_form, full_form);
@@ -1730,7 +1730,7 @@ TEST_F(SugarTest, LambdaTypeCapAndError)
     "  fun box f(x: $T): None\n"
 
     "interface ref $T\n"
-    "  fun ref apply(p1: U32, p2: U16): Bool ?";
+    "  fun ref apply(p1: U32, p2: U16): Bool ? None";
 
   TEST_EQUIV(short_form, full_form);
 }
@@ -2282,9 +2282,9 @@ TEST_F(SugarTest, CaseFunctionOneErrors)
     "use \"builtin\"\n"
     "class ref Foo\n"
     "  var create: U32\n"
-    "  fun ref fib(a: U64): (None | U64 | U64) ? =>\n"
+    "  fun ref fib(a: U64): (None | U64 | U64) ? None =>\n"
     "    $1(consume a)\n"
-    "  fun ref $1($2: U64): (None | U64 | U64) ? =>\n"
+    "  fun ref $1($2: U64): (None | U64 | U64) ? None =>\n"
     "    match consume $2\n"
     "    | 0 => 0\n"
     "    | $let a: U64 => 1\n"
@@ -2308,9 +2308,9 @@ TEST_F(SugarTest, CaseFunctionAllError)
     "use \"builtin\"\n"
     "class ref Foo\n"
     "  var create: U32\n"
-    "  fun ref fib(a: U64): (None | U64 | U64) ? =>\n"
+    "  fun ref fib(a: U64): (None | U64 | U64) ? (None | None) =>\n"
     "    $1(consume a)\n"
-    "  fun ref $1($2: U64): (None | U64 | U64) ? =>\n"
+    "  fun ref $1($2: U64): (None | U64 | U64) ? (None | None) =>\n"
     "    match consume $2\n"
     "    | 0 => 0\n"
     "    | $let a: U64 => 1\n"

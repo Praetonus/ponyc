@@ -1,4 +1,5 @@
 #include "ffi.h"
+#include "control.h"
 #include "literal.h"
 #include "../type/subtype.h"
 #include "../pkg/ifdef.h"
@@ -110,6 +111,24 @@ static bool declared_ffi(pass_opt_t* opt, ast_t* call, ast_t* decl)
     return false;
   }
 
+  // Check error types
+  if((ast_id(call_error) == TK_QUESTION) && (ast_id(decl_error) == TK_QUESTION))
+  {
+    ast_t* call_error_type = ast_child(call_error);
+    ast_t* decl_error_type = ast_child(decl_error);
+
+    info = NULL;
+    if(!is_eqtype(call_error_type, decl_error_type, &info, opt))
+    {
+      errorframe_t frame = NULL;
+      ast_error_frame(&frame, call_error_type,
+        "call error type does not match declaration");
+      errorframe_append(&frame, &info);
+      errorframe_report(&frame, opt->check.errors);
+      return false;
+    }
+  }
+
   // Store the declaration so that codegen can generate a non-variadic
   // signature for the FFI call.
   ast_setdata(call, decl);
@@ -119,7 +138,7 @@ static bool declared_ffi(pass_opt_t* opt, ast_t* call, ast_t* decl)
 
 bool expr_ffi(pass_opt_t* opt, ast_t* ast)
 {
-  AST_GET_CHILDREN(ast, name, return_typeargs, args, namedargs, question);
+  AST_GET_CHILDREN(ast, name, return_typeargs, args, namedargs, error);
   assert(name != NULL);
 
   ast_t* decl;
@@ -150,6 +169,9 @@ bool expr_ffi(pass_opt_t* opt, ast_t* ast)
       "FFIs without declarations must specify return type");
     return false;
   }
+
+  if(ast_id(error) == TK_QUESTION)
+    partial_add_type(opt, ast, ast_child(error));
 
   ast_settype(ast, return_type);
 

@@ -13,21 +13,39 @@
 
 bool expr_match(pass_opt_t* opt, ast_t* ast)
 {
-  assert(ast_id(ast) == TK_MATCH);
-  AST_GET_CHILDREN(ast, expr, cases, else_clause);
+  ast_t* expr = NULL;
+  ast_t* cases = NULL;
+  ast_t* else_clause = NULL;
+
+  switch(ast_id(ast))
+  {
+    case TK_MATCH:
+      AST_GET_CHILDREN_NO_DECL(ast, expr, cases, else_clause);
+      break;
+
+    case TK_ELSEMATCH:
+      AST_GET_CHILDREN_NO_DECL(ast, cases, else_clause);
+      break;
+
+    default:
+      assert(0);
+  }
 
   // A literal match expression should have been caught by the cases, but check
   // again to avoid an assert if we've missed a case
-  ast_t* expr_type = ast_type(expr);
-
-  if(is_typecheck_error(expr_type))
-    return false;
-
-  if(is_type_literal(expr_type))
+  if(expr != NULL)
   {
-    ast_error(opt->check.errors, expr,
-      "cannot infer type for literal match expression");
-    return false;
+    ast_t* expr_type = ast_type(expr);
+
+    if(is_typecheck_error(expr_type))
+      return false;
+
+    if(is_type_literal(expr_type))
+    {
+      ast_error(opt->check.errors, expr,
+        "cannot infer type for literal match expression");
+      return false;
+    }
   }
 
   ast_t* cases_type = ast_type(cases);
@@ -61,7 +79,7 @@ bool expr_match(pass_opt_t* opt, ast_t* ast)
       return false;
     }
 
-    type = ast_from(ast, TK_MATCH);
+    type = ast_from(ast, ast_id(ast));
   }
 
   ast_settype(ast, type);
@@ -70,6 +88,25 @@ bool expr_match(pass_opt_t* opt, ast_t* ast)
 
   // Push our symbol status to our parent scope.
   ast_inheritstatus(ast_parent(ast), ast);
+  return true;
+}
+
+bool expr_elsematch(pass_opt_t* opt, ast_t* ast)
+{
+  assert(ast_id(ast) == TK_ELSEMATCH);
+
+  if(!expr_match(opt, ast))
+    return false;
+
+  ast_t* parent = ast_parent(ast);
+  assert((ast_id(parent) == TK_TRY) || (ast_id(parent) == TK_TRY_NO_CHECK));
+  assert(ast_childidx(parent, 1) == ast);
+
+  ast_t* then_clause = ast_childidx(parent, 2);
+
+  ast_inheritbranch(then_clause, ast);
+  ast_consolidate_branches(then_clause, 2);
+
   return true;
 }
 
@@ -296,8 +333,32 @@ bool expr_case(pass_opt_t* opt, ast_t* ast)
 
   ast_t* cases = ast_parent(ast);
   ast_t* match = ast_parent(cases);
-  ast_t* match_expr = ast_child(match);
-  ast_t* match_type = ast_type(match_expr);
+  ast_t* match_expr = NULL;
+  ast_t* match_type = NULL;
+
+  switch(ast_id(match))
+  {
+    case TK_MATCH:
+      match_expr = ast_child(match);
+      match_type = ast_type(match_expr);
+      break;
+
+    case TK_ELSEMATCH:
+      // An elsematch has no match expression, but gets its match type from the
+      // associated try.
+      match_type = (ast_t*)ast_data(ast_parent(match));
+      if(match_type == NULL)
+      {
+        // The associated try never raises errors. Just match on Any val. If the
+        // try isn't TRY_NO_CHECK, this will be reported during the verify pass.
+        match_type = type_builtin(opt, match, "Any");
+        ast_setid(ast_childidx(match_type, 3), TK_VAL);
+      }
+      break;
+
+    default:
+      assert(0);
+  }
 
   if(is_control_type(match_type) || is_typecheck_error(match_type))
     return false;
@@ -373,6 +434,7 @@ bool expr_case(pass_opt_t* opt, ast_t* ast)
   }
 
   ast_free_unattached(operand_type);
+
   return ok;
 }
 
