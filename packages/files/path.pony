@@ -486,7 +486,7 @@ primitive Path
       path
     end
 
-  fun canonical(path: String): String ? =>
+  fun canonical(path: String): String ? FileError =>
     """
     Return the equivalent canonical absolute path. Raise an error if there
     isn't one.
@@ -495,7 +495,7 @@ primitive Path
       path.cstring())
 
     if cstring.is_null() then
-      error
+      error FileError
     else
       recover String.from_cstring(consume cstring) end
     end

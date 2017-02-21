@@ -52,7 +52,7 @@ actor Main is TestList
     test(_TestFnMatch("a12c", "a[12]c", false))
 
 primitive _FileHelper
-  fun make_files(h: TestHelper, files: Array[String]): FilePath? =>
+  fun make_files(h: TestHelper, files: Array[String]): FilePath ? Any val =>
     let top = Directory(FilePath.mkdtemp(h.env.root as AmbientAuth,
       "tmp._FileHelper."))
     for f in files.values() do
@@ -65,7 +65,7 @@ primitive _FileHelper
         end
       else
         h.fail("Failed to create file: " + f)
-        h.assert_true(top.path.remove())
+        h.assert_no_error(top.path~remove())
         error
       end
     end
@@ -117,7 +117,7 @@ class iso _TestGlob is UnitTest
     end
     res
 
-  fun apply(h: TestHelper) ? =>
+  fun apply(h: TestHelper) ? Any val=>
     let top = _FileHelper.make_files(h, ["a/1", "a/2", "b", "c/1", "c/4"])
     try
       h.assert_array_eq_unordered[String](
@@ -125,7 +125,7 @@ class iso _TestGlob is UnitTest
       h.assert_array_eq_unordered[String](
         Array[String], _rel(top, Glob.glob(top, "1")))
     then
-      h.assert_true(top.remove())
+      h.assert_no_error(top~remove())
     end
 
 class iso _TestIGlob is UnitTest
@@ -137,7 +137,7 @@ class iso _TestIGlob is UnitTest
     end
     res
 
-  fun apply(h: TestHelper) ? =>
+  fun apply(h: TestHelper) ? Any val =>
     let top = _FileHelper.make_files(h, ["a/1", "a/2", "b", "c/1", "c/4"])
     try
       Glob.iglob(top, "*/1", {(f: FilePath, matches: Array[String])(top, h) =>
@@ -153,5 +153,5 @@ class iso _TestIGlob is UnitTest
         end
       })
     then
-      h.assert_true(top.remove())
+      h.assert_no_error(top~remove())
     end

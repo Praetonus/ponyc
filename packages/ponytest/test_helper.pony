@@ -1,5 +1,5 @@
 interface ITest
-  fun apply()?
+  fun apply() ? Any val
 
 class val TestHelper
   """

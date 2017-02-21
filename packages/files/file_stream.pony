@@ -12,22 +12,30 @@ actor FileStream is OutStream
     """
     Print some bytes and insert a newline afterwards.
     """
-    _file.print(data)
+    try
+      _file.print(data)
+    end
 
   be write(data: ByteSeq) =>
     """
     Print some bytes without inserting a newline afterwards.
     """
-    _file.write(data)
+    try
+      _file.write(data)
+    end
 
   be printv(data: ByteSeqIter) =>
     """
     Print an iterable collection of ByteSeqs.
     """
-    _file.printv(data)
+    try
+      _file.printv(data)
+    end
 
   be writev(data: ByteSeqIter) =>
     """
     Write an iterable collection of ByteSeqs.
     """
-    _file.writev(data)
+    try
+      _file.writev(data)
+    end

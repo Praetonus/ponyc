@@ -18,7 +18,7 @@ trait UnitTest
     """
     ""
 
-  fun ref apply(h: TestHelper) ?
+  fun ref apply(h: TestHelper) ? Any val
     """
     Run the test.
     Raising an error is interpreted as a test failure.

@@ -16,7 +16,7 @@ class val FilePath
   let caps: FileCaps = FileCaps
 
   new val create(base: (FilePath | AmbientAuth), path': String,
-    caps': FileCaps val = recover val FileCaps.>all() end) ?
+    caps': FileCaps val = recover val FileCaps.>all() end) ? FileError
   =>
     """
     Create a new path. The caller must either provide the root capability or an
@@ -34,23 +34,23 @@ class val FilePath
     match base
     | let b: FilePath =>
       if not b.caps(FileLookup) then
-        error
+        error FileError
       end
 
       path = Path.join(b.path, path')
       caps.intersect(b.caps)
 
       if not path.at(b.path, 0) then
-        error
+        error FileError
       end
     | let b: AmbientAuth =>
       path = Path.abs(path')
     else
-      error
+      error FileError
     end
 
   new val mkdtemp(base: (FilePath | AmbientAuth), prefix: String = "",
-    caps': FileCaps val = recover val FileCaps.>all() end) ?
+    caps': FileCaps val = recover val FileCaps.>all() end) ? FileErrNo
   =>
     """
     Create a temporary directory and returns a path to it. The directory's name
@@ -67,14 +67,18 @@ class val FilePath
     (let dir, let pre) = Path.split(prefix)
     let parent = FilePath(base, dir)
 
-    if not parent.mkdir() then
-      error
-    end
+    parent.mkdir()
 
     var temp = FilePath(parent, pre + Path.random())
+    var ok = false
 
-    while not temp.mkdir(true) do
-      temp = FilePath(parent, pre + Path.random())
+    while not ok do
+      try
+        temp.mkdir(true)
+        ok = true
+      else
+        temp = FilePath(parent, pre + Path.random())
+      end
     end
 
     caps.union(caps')
@@ -89,7 +93,9 @@ class val FilePath
     caps.union(caps')
 
   fun val join(path': String,
-    caps': FileCaps val = recover val FileCaps.>all() end): FilePath ? =>
+    caps': FileCaps val = recover val FileCaps.>all() end): FilePath
+    ? FileError
+  =>
     """
     Return a new path relative to this one.
     """
@@ -117,7 +123,7 @@ class val FilePath
       return
     end
 
-  fun val canonical(): FilePath ? =>
+  fun val canonical(): FilePath ? FileError =>
     """
     Return the equivalent canonical absolute path. Raise an error if there
     isn't one.
@@ -134,7 +140,7 @@ class val FilePath
       false
     end
 
-  fun val mkdir(must_create: Bool = false): Bool =>
+  fun val mkdir(must_create: Bool = false) ? FileErrNo =>
     """
     Creates the directory. Will recursively create each element. Returns true
     if the directory exists when we're done, false if it does not. If we do not
@@ -142,7 +148,7 @@ class val FilePath
     does exist.
     """
     if not caps(FileMkdir) then
-      return false
+      error FileNoCapability
     end
 
     var offset: ISize = 0
@@ -165,81 +171,78 @@ class val FilePath
 
         if r != 0 then
           if @pony_os_errno[I32]() != @pony_os_eexist[I32]() then
-            return false
+            error _FileDes.get_error()
           end
 
           if must_create and (offset < 0) then
-            return false
+            error FileError
           end
         end
       end
     until offset < 0 end
 
-    try
-      FileInfo(this).directory
-    else
-      false
+    if not FileInfo(this).directory then
+      error FileError
     end
 
-  fun val remove(): Bool =>
+  fun val remove() ? FileErrNo =>
     """
     Remove the file or directory. The directory contents will be removed as
     well, recursively. Symlinks will be removed but not traversed.
     """
     if not caps(FileRemove) then
-      return false
+      error FileNoCapability
     end
 
-    try
-      let info = FileInfo(this)
+    let info = FileInfo(this)
 
-      if info.directory and not info.symlink then
-        let directory = Directory(this)
+    if info.directory and not info.symlink then
+      let directory = Directory(this)
 
-        for entry in directory.entries().values() do
-          if not join(entry).remove() then
-            return false
-          end
-        end
+      for entry in directory.entries().values() do
+        join(entry).remove()
       end
+    end
 
-      ifdef windows then
-        if info.directory and not info.symlink then
-          0 == @_rmdir[I32](path.cstring())
-        else
-          0 == @_unlink[I32](path.cstring())
-        end
+    let ok = ifdef windows then
+      if info.directory and not info.symlink then
+        0 == @_rmdir[I32](path.cstring())
       else
-        if info.directory and not info.symlink then
-          0 == @rmdir[I32](path.cstring())
-        else
-          0 == @unlink[I32](path.cstring())
-        end
+        0 == @_unlink[I32](path.cstring())
       end
     else
-      false
+      if info.directory and not info.symlink then
+        0 == @rmdir[I32](path.cstring())
+      else
+        0 == @unlink[I32](path.cstring())
+      end
     end
 
-  fun rename(new_path: FilePath): Bool =>
+    if not ok then
+      error _FileDes.get_error()
+    end
+
+  fun rename(new_path: FilePath) ? FileErrNo =>
     """
     Rename a file or directory.
     """
     if not caps(FileRename) or not new_path.caps(FileCreate) then
-      return false
+      error FileNoCapability
     end
 
-    0 == @rename[I32](path.cstring(),
-      new_path.path.cstring())
+    if @rename[I32](path.cstring(), new_path.path.cstring()) != 0 then
+      error _FileDes.get_error()
+    end
 
-  fun symlink(link_name: FilePath): Bool =>
+  fun symlink(link_name: FilePath) ? FileErrNo =>
     """
     Create a symlink to a file or directory.
     """
     if not caps(FileLink) or not link_name.caps(FileCreate) then
-      return false
+      error FileNoCapability
     end
 
-    ifdef windows then
+    let ok = ifdef windows then
       0 != @CreateSymbolicLink[U8](link_name.path.cstring(),
         path.cstring())
     else
@@ -247,51 +250,59 @@ class val FilePath
         link_name.path.cstring())
     end
 
-  fun chmod(mode: FileMode box): Bool =>
+    if not ok then
+      error _FileDes.get_error()
+    end
+
+  fun chmod(mode: FileMode box) ? FileErrNo =>
     """
     Set the FileMode for a path.
     """
     if not caps(FileChmod) then
-      return false
+      error FileNoCapability
     end
 
     let m = mode._os()
 
-    ifdef windows then
+    let ok = ifdef windows then
       0 == @_chmod[I32](path.cstring(), m)
     else
       0 == @chmod[I32](path.cstring(), m)
     end
 
-  fun chown(uid: U32, gid: U32): Bool =>
+    if not ok then
+      error _FileDes.get_error()
+    end
+
+  fun chown(uid: U32, gid: U32) ? FileErrNo =>
     """
     Set the owner and group for a path. Does nothing on Windows.
     """
-    ifdef windows then
-      false
-    else
-      if caps(FileChown) then
-        0 == @chown[I32](path.cstring(), uid, gid)
-      else
-        false
+    ifdef not windows then
+      if not caps(FileChown) then
+        error FileNoCapability
+      end
+
+      if @chown[I32](path.cstring(), uid, gid) != 0 then
+        error _FileDes.get_error()
       end
     end
 
-  fun touch(): Bool =>
+  fun touch() ? FileErrNo =>
     """
     Set the last access and modification times of a path to now.
     """
     set_time(Time.now(), Time.now())
 
-  fun set_time(atime: (I64, I64), mtime: (I64, I64)): Bool =>
+  fun set_time(atime: (I64, I64), mtime: (I64, I64)) ? FileErrNo =>
     """
     Set the last access and modification times of a path to the given values.
     """
     if not caps(FileTime) then
-      return false
+      error FileNoCapability
     end
 
-    ifdef windows then
+    let ok = ifdef windows then
       var tv: (I64, I64) = (atime._1, mtime._1)
       0 == @_utime64[I32](path.cstring(), addressof tv)
     else
@@ -299,4 +310,8 @@ class val FilePath
         (atime._1.ilong(), atime._2.ilong() / 1000,
           mtime._1.ilong(), mtime._2.ilong() / 1000)
       0 == @utimes[I32](path.cstring(), addressof tv)
+    end
+
+    if not ok then
+      error _FileDes.get_error()
     end

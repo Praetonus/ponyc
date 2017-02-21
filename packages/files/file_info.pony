@@ -31,43 +31,51 @@ class val FileInfo
   let symlink: Bool = false
   let broken: Bool = false
 
-  new val create(from: FilePath) ? =>
+  new val create(from: FilePath) ? FileErrNo =>
     """
     This will raise an error if the FileStat capability isn't available or the
     path doesn't exist.
     """
     if not from.caps(FileStat) then
-      error
+      error FileNoCapability
     end
 
     filepath = from
 
     if not @pony_os_stat[Bool](from.path.cstring(), this) then
-      error
+      error FileError
     end
 
-  new val _descriptor(fd: I32, path: FilePath) ? =>
+  new val _descriptor(fd: I32, path: FilePath) ? FileErrNo =>
     """
     This will raise an error if the FileStat capability isn't available or the
     file descriptor is invalid.
     """
-    if not path.caps(FileStat) or (fd == -1) then
-      error
+    if not path.caps(FileStat) then
+      error FileNoCapability
+    end
+
+    if fd == -1 then
+      error FileError
     end
 
     filepath = path
 
-    let fstat =
-      @pony_os_fstat[Bool](fd, path.path.cstring(), this)
-    if not fstat then error end
+    if not @pony_os_fstat[Bool](fd, path.path.cstring(), this) then
+      error FileError
+    end
 
-  new val _relative(fd: I32, path: FilePath, from: String) ? =>
-    if not path.caps(FileStat) or (fd == -1) then
-      error
+  new val _relative(fd: I32, path: FilePath, from: String) ? FileErrNo =>
+    if not path.caps(FileStat) then
+      error FileNoCapability
+    end
+
+    if fd == -1 then
+      error FileError
     end
 
     filepath = path
 
-    let fstatat =
-      @pony_os_fstatat[Bool](fd, from.cstring(), this)
-    if not fstatat then error end
+    if not @pony_os_fstatat[Bool](fd, from.cstring(), this) then
+      error FileError
+    end

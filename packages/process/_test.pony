@@ -140,14 +140,14 @@ class iso _TestNonExecutablePathResultsInExecveError is UnitTest
         _cleanup()
 
       fun _cleanup() =>
-        _path.remove()
+        try _path.remove() end
     end end
 
-  fun _setup_file(h: TestHelper): FilePath ? =>
+  fun _setup_file(h: TestHelper): FilePath ? Any val =>
     let tmp_dir = FilePath(h.env.root as AmbientAuth, "/tmp/")
     let path = FilePath(h.env.root as AmbientAuth,
       tmp_dir.path + "/" + Path.random(32))
-    let tmp_file = CreateFile(path) as File
+    let tmp_file = File(path)
     let mode = FileMode
     mode.any_exec = false
     tmp_file.path.chmod(consume mode)

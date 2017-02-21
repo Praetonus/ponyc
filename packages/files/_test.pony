@@ -19,7 +19,7 @@ actor Main is TestList
     test(_TestFileEOF)
 
 primitive _FileHelper
-  fun make_files(h: TestHelper, files: Array[String]): FilePath? =>
+  fun make_files(h: TestHelper, files: Array[String]): FilePath ? Any val =>
     let top = Directory(FilePath.mkdtemp(h.env.root as AmbientAuth,
       "tmp._FileHelper."))
     for f in files.values() do
@@ -33,7 +33,7 @@ primitive _FileHelper
         end
       else
         h.fail("Failed to create file: " + f)
-        h.assert_true(top.path.remove())
+        h.assert_no_error(top.path~remove())
         error
       end
     end
@@ -42,18 +42,18 @@ primitive _FileHelper
 
 class iso _TestMkdtemp is UnitTest
   fun name(): String => "files/FilePath.mkdtemp"
-  fun apply(h: TestHelper) ? =>
+  fun apply(h: TestHelper) ? Any val =>
     let tmp = FilePath.mkdtemp(h.env.root as AmbientAuth, "tmp.TestMkdtemp.")
     try
       h.assert_true(FileInfo(tmp).directory)
     then
-      h.assert_true(tmp.remove())
+      h.assert_no_error(tmp~remove())
     end
 
 
 class iso _TestWalk is UnitTest
   fun name(): String => "files/FilePath.walk"
-  fun apply(h: TestHelper) ? =>
+  fun apply(h: TestHelper) ? Any val =>
     let top = _FileHelper.make_files(
       h, ["a/1", "a/2", "b", "c/3", "c/4", "d/5", "d/6"])
     try
@@ -72,22 +72,24 @@ class iso _TestWalk is UnitTest
           end
         })
     then
-      h.assert_true(top.remove())
+      h.assert_no_error(top~remove())
     end
 
 
 class iso _TestDirectoryOpen is UnitTest
   fun name(): String => "files/File.open.directory"
-  fun apply(h: TestHelper) ? =>
+  fun apply(h: TestHelper) ? Any val =>
     let tmp = FilePath.mkdtemp(h.env.root as AmbientAuth, "tmp.TestDiropen.")
 
     try
       h.assert_true(FileInfo(tmp).directory)
-      let file = File.open(tmp)
-      h.assert_true(file.errno() is FileError)
-      h.assert_false(file.valid())
+      File.open(tmp)
+      h.fail("Directory successfuly opened")
+    elsematch
+    | FileError => None
+    elseerror
     then
-      h.assert_true(tmp.remove())
+      h.assert_no_error(tmp~remove())
     end
 
 
@@ -260,8 +262,10 @@ class iso _TestFileEOF is UnitTest
       try
         let line2 = file.line()
         h.fail("Read beyond EOF without error!")
-      else
-        h.assert_true(file.errno() is FileEOF)
+      elsematch
+      | FileEOF => None
+      elseerror
+      then
+        h.assert_no_error(filepath~remove())
       end
-      filepath.remove()
     end

@@ -46,7 +46,7 @@ primitive FileWrite
   fun value(): U32 => 1 << 14
 
 primitive FileExec
-  fun value(): U32 => 1 << 15    
+  fun value(): U32 => 1 << 15
 
 type FileCaps is Flags[
   ( FileCreate

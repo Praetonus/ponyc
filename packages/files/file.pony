@@ -6,53 +6,17 @@ primitive FileEOF
 primitive FileBadFileNumber
 primitive FileExists
 primitive FilePermissionDenied
+primitive FileNoCapability
 
-primitive _EBADF
-  fun apply(): I32 => 9
-
-primitive _EEXIST
-  fun apply(): I32 => 17
-
-primitive _EACCES
-  fun apply(): I32 => 13
-    
 type FileErrNo is
-  ( FileOK
+  (FileOK
   | FileError
   | FileEOF
   | FileBadFileNumber
   | FileExists
   | FilePermissionDenied
+  | FileNoCapability
   )
-
-primitive CreateFile
-  """
-  Open a File for read/write, creating if it doesn't exist, preserving the
-  contents if it does exist.
-  """
-  fun apply(from: FilePath): (File | FileErrNo) =>
-    let file = File(from)
-    let err = file.errno()
-
-    match err
-    | FileOK => file
-    else
-      err
-    end
-
-primitive OpenFile
-  """
-  Open a File for read only.
-  """
-  fun apply(from: FilePath): (File | FileErrNo) =>
-    let file = File.open(from)
-    let err = file.errno()
-
-    match err
-    | FileOK => file
-    else
-      err
-    end
 
 class File
   """
@@ -63,13 +27,11 @@ class File
   var _fd: I32
   var _handle: Pointer[_FileHandle]
   var _last_line_length: USize = 256
-  var _errno: FileErrNo = FileOK
 
-  new create(from: FilePath) =>
+  new create(from: FilePath) ? FileErrNo =>
     """
     Attempt to open for read/write, creating if it doesn't exist, preserving
     the contents if it does exist.
-    Set errno according to result.
     """
     path = from
     writeable = true
@@ -77,41 +39,40 @@ class File
     _handle = Pointer[_FileHandle]
 
     if not from.caps(FileRead) or not from.caps(FileWrite) then
-      _errno = FileError
-    else
-      var mode = "x"
-      if not from.exists() then
-        if not from.caps(FileCreate) then
-          _errno = FileError
-        else
-          mode = "w+b"
-        end
-      else
-        mode = "r+b"
+      error FileNoCapability
+    end
+
+    var mode = "x"
+    if not from.exists() then
+      if not from.caps(FileCreate) then
+        error FileNoCapability
       end
 
-      if mode != "x" then
-        _handle = @fopen[Pointer[_FileHandle]](
-          path.path.cstring(), mode.cstring())
+      mode = "w+b"
+    else
+      mode = "r+b"
+    end
 
-        if _handle.is_null() then
-          _errno = _get_error()
-        else
-          _fd = _get_fd(_handle)
+    if mode != "x" then
+      _handle = @fopen[Pointer[_FileHandle]](
+        path.path.cstring(), mode.cstring())
 
-          try
-            _FileDes.set_rights(_fd, path, writeable)
-          else
-            _errno = FileError
-          end
-        end
+      if _handle.is_null() then
+        error _FileDes.get_error()
+      end
+
+      _fd = _get_fd(_handle)
+
+      try
+        _FileDes.set_rights(_fd, path, writeable)
+      else
+        error FileError
       end
     end
 
-  new open(from: FilePath) =>
+  new open(from: FilePath) ? FileErrNo =>
     """
     Open for read only.
-    Set _errno according to result.
     """
     path = from
     writeable = false
@@ -127,30 +88,30 @@ class File
         true
       end
     then
-      _errno = FileError
-    else
-      _handle = @fopen[Pointer[_FileHandle]](
-        from.path.cstring(), "rb".cstring())
-
-      if _handle.is_null() then
-        _errno = FileError
-      else
-        _fd = _get_fd(_handle)
-
-        try
-          _FileDes.set_rights(_fd, path, writeable)
-        else
-          _errno = FileError
-        end
-      end
+      error FileError
     end
 
-  new _descriptor(fd: I32, from: FilePath) ? =>
+    _handle = @fopen[Pointer[_FileHandle]](
+      from.path.cstring(), "rb".cstring())
+
+    if _handle.is_null() then
+      error FileError
+    end
+
+    _fd = _get_fd(_handle)
+
+    try
+      _FileDes.set_rights(_fd, path, writeable)
+    else
+      error FileError
+    end
+
+  new _descriptor(fd: I32, from: FilePath) ? FileErrNo =>
     """
     Internal constructor from a file descriptor and a path.
     """
     if not from.caps(FileRead) or (fd == -1) then
-      error
+      error FileNoCapability
     end
 
     path = from
@@ -164,29 +125,12 @@ class File
     end
 
     if _handle.is_null() then
-      _errno = _get_error()
-      error
+      error _FileDes.get_error()
     end
 
     _FileDes.set_rights(_fd, path, writeable)
 
-  fun errno(): FileErrNo =>
-    """
-    Returns the last error code set for this File
-    """
-    _errno
-
-  fun ref clear_errno() =>
-    """
-    Clears the last error code set for this File.
-    Clears the error indicator for the stream.
-    """
-    if not _handle.is_null() then
-      @clearerr[None](_handle)
-    end
-    _errno = FileOK
-
-  fun get_stream_error(): FileErrNo =>
+  fun _get_stream_error(): FileErrNo =>
     """
     Checks for errors after File stream operations.
     Retrieves errno if ferror is true.
@@ -195,24 +139,10 @@ class File
       return FileEOF
     end
     if @ferror[I32](_handle) != 0 then
-      return _get_error()
+      return _FileDes.get_error()
     end
     FileOK
 
-  fun _get_error(): FileErrNo =>
-    """
-    Fetch errno from the OS.
-    """
-    let os_errno = @pony_os_errno[I32]()
-    match os_errno
-    | _EBADF() => return FileBadFileNumber
-    | _EEXIST() => return FileExists
-    | _EACCES() => return FilePermissionDenied
-    else
-      return FileError
-    end
-
-    
   fun valid(): Bool =>
     """
     Returns true if the file is currently open.
@@ -230,13 +160,13 @@ class File
 
     _fd
 
-  fun ref line(): String iso^ ? =>
+  fun ref line(): String iso^ ? FileErrNo =>
     """
     Returns a line as a String. The newline is not included in the string. If
     there is no more data, this raises an error.
     """
     if _handle.is_null() then
-      error
+      error FileError
     end
 
     var offset: USize = 0
@@ -258,11 +188,11 @@ class File
       result.recalc()
 
       if r.is_null() then
-        _errno = get_stream_error() // either EOF or error
+        error _get_stream_error() // either EOF or error
       end
-      
+
       done = try
-        r.is_null() or (result.at_offset(-1) == '\n')
+        result.at_offset(-1) == '\n'
       else
         true
       end
@@ -271,10 +201,6 @@ class File
         offset = result.size()
         len = len * 2
       end
-    end
-
-    if result.size() == 0 then
-      error
     end
 
     try
@@ -290,7 +216,7 @@ class File
     _last_line_length = len
     result
 
-  fun ref read(len: USize): Array[U8] iso^ =>
+  fun ref read(len: USize): Array[U8] iso^ ? FileErrNo =>
     """
     Returns up to len bytes.
     """
@@ -304,15 +230,18 @@ class File
       end
 
       if r < len then
-        _errno = get_stream_error() // EOF or error
+        let errno = _get_stream_error() // EOF or error
+        if errno isnt FileEOF then
+          error errno
+        end
       end
-      
+
       (consume result).>truncate(r)
     else
       recover Array[U8] end
     end
 
-  fun ref read_string(len: USize): String iso^ =>
+  fun ref read_string(len: USize): String iso^ ? FileErrNo =>
     """
     Returns up to len bytes. The resulting string may have internal null
     characters.
@@ -328,33 +257,34 @@ class File
       end
 
       if r < len then
-        _errno = get_stream_error() // EOF or error
+        let errno = _get_stream_error() // EOF or error
+        if errno isnt FileEOF then
+          error errno
+        end
       end
-      
+
       result.truncate(r)
       result
     else
       recover String end
     end
 
-  fun ref print(data: ByteSeq box): Bool =>
+  fun ref print(data: ByteSeq box) ? FileErrNo =>
     """
     Same as write, buts adds a newline.
     """
-    write(data) and write("\n")
+    write(data)
+    write("\n")
 
-  fun ref printv(data: ByteSeqIter box): Bool =>
+  fun ref printv(data: ByteSeqIter box) ? FileErrNo =>
     """
     Print an iterable collection of ByteSeqs.
     """
     for bytes in data.values() do
-      if not print(bytes) then
-        return false
-      end
+      print(bytes)
     end
-    true
 
-  fun ref write(data: ByteSeq box): Bool =>
+  fun ref write(data: ByteSeq box) ? FileErrNo =>
     """
     Returns false if the file wasn't opened with write permission.
     Returns false and closes the file if not all the bytes were written.
@@ -367,27 +297,23 @@ class File
       end
 
       if len == data.size() then
-        return true
+        return
       end
-      // check error
-      _errno = get_stream_error()
       // fwrite can't resume in case of error
+      let errno = _get_stream_error()
       dispose()
+      error errno
     end
-    false
 
-  fun ref writev(data: ByteSeqIter box): Bool =>
+  fun ref writev(data: ByteSeqIter box) ? FileErrNo =>
     """
     Write an iterable collection of ByteSeqs.
     """
     for bytes in data.values() do
-      if not write(bytes) then
-        return false
-      end
+      write(bytes)
     end
-    true
 
-  fun ref position(): USize =>
+  fun ref position(): USize ? FileErrNo =>
     """
     Return the current cursor position in the file.
     """
@@ -398,7 +324,7 @@ class File
         @ftell[USize](_handle)
       end
       if r < 0 then
-        _errno = _get_error()
+        error _FileDes.get_error()
       end
       r
     else
@@ -409,13 +335,17 @@ class File
     """
     Return the total length of the file.
     """
-    let pos = position()
-    _seek(0, 2)
-    let len = position()
-    _seek(pos.isize(), 0)
-    len
+    try
+      let pos = position()
+      _seek(0, 2)
+      let len = position()
+      _seek(pos.isize(), 0)
+      len
+    else
+      0
+    end
 
-  fun ref seek_start(offset: USize) =>
+  fun ref seek_start(offset: USize) ? FileErrNo =>
     """
     Set the cursor position relative to the start of the file.
     """
@@ -423,7 +353,7 @@ class File
       _seek(offset.isize(), 0)
     end
 
-  fun ref seek_end(offset: USize) =>
+  fun ref seek_end(offset: USize) ? FileErrNo =>
     """
     Set the cursor position relative to the end of the file.
     """
@@ -431,7 +361,7 @@ class File
       _seek(-offset.isize(), 2)
     end
 
-  fun ref seek(offset: ISize) =>
+  fun ref seek(offset: ISize) ? FileErrNo =>
     """
     Move the cursor position.
     """
@@ -439,7 +369,7 @@ class File
       _seek(offset, 1)
     end
 
-  fun ref flush() =>
+  fun ref flush() ? FileErrNo =>
     """
     Flush the file.
     """
@@ -450,11 +380,11 @@ class File
         @fflush[I32](_handle)
       end
       if r != 0 then
-        _errno = _get_error()
+        error _FileDes.get_error()
       end
     end
 
-  fun ref sync() =>
+  fun ref sync() ? FileErrNo =>
     """
     Sync the file contents to physical storage.
     """
@@ -465,12 +395,12 @@ class File
       else
         let r = @fsync[I32](_fd)
         if r < 0 then
-          _errno = _get_error()
+          error _FileDes.get_error()
         end
       end
     end
 
-  fun ref set_length(len: USize): Bool =>
+  fun ref set_length(len: USize) ? FileErrNo =>
     """
     Change the file size. If it is made larger, the new contents are undefined.
     """
@@ -486,43 +416,38 @@ class File
       if pos >= len then
         _seek(0, 2)
       end
-      
-      if result == 0 then
-        true
-      else
-        _errno = _get_error()
-        false
+
+      if result != 0 then
+        error _FileDes.get_error()
       end
-    else
-      false
     end
 
-  fun info(): FileInfo ? =>
+  fun info(): FileInfo ? FileErrNo =>
     """
     Return a FileInfo for this directory. Raise an error if the fd is invalid
     or if we don't have FileStat permission.
     """
     FileInfo._descriptor(_fd, path)
 
-  fun chmod(mode: FileMode box): Bool =>
+  fun chmod(mode: FileMode box) ? FileErrNo =>
     """
     Set the FileMode for this directory.
     """
     _FileDes.chmod(_fd, path, mode)
 
-  fun chown(uid: U32, gid: U32): Bool =>
+  fun chown(uid: U32, gid: U32) ? FileErrNo =>
     """
     Set the owner and group for this directory. Does nothing on Windows.
     """
     _FileDes.chown(_fd, path, uid, gid)
 
-  fun touch(): Bool =>
+  fun touch() ? FileErrNo =>
     """
     Set the last access and modification times of the directory to now.
     """
     _FileDes.touch(_fd, path)
 
-  fun set_time(atime: (I64, I64), mtime: (I64, I64)): Bool =>
+  fun set_time(atime: (I64, I64), mtime: (I64, I64)) ? FileErrNo =>
     """
     Set the last access and modification times of the directory to the given
     values.
@@ -545,7 +470,7 @@ class File
       _fd = -1
     end
 
-  fun ref _seek(offset: ISize, base: I32) =>
+  fun ref _seek(offset: ISize, base: I32) ? FileErrNo =>
     """
     Move the cursor position.
     """
@@ -555,7 +480,7 @@ class File
       else
         let r = @fseek[I32](_handle, offset, base)
         if r < 0 then
-          _errno = _get_error()
+          error _FileDes.get_error()
         end
       end
     end
