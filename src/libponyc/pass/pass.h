@@ -257,6 +257,7 @@ typedef enum pass_id
     "    =all           The default: generate an executable.\n"
 
 typedef struct magic_package_t magic_package_t;
+typedef struct safe_package_t safe_package_t;
 typedef struct plugins_t plugins_t;
 
 /** Pass options.
@@ -287,7 +288,7 @@ typedef struct pass_opt_t
   bool parse_trace;
 
   strlist_t* package_search_paths;
-  strlist_t* safe_packages;
+  safe_package_t* safe_packages;
   magic_package_t* magic_packages;
 
   const char* output;

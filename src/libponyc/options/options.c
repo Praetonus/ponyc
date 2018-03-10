@@ -41,7 +41,9 @@ enum
   OPT_DOCS,
   OPT_DOCS_PUBLIC,
 
-  OPT_SAFE,
+  OPT_SAFE_1,
+  OPT_SAFE_2,
+  OPT_SAFE_3,
   OPT_CPU,
   OPT_FEATURES,
   OPT_TRIPLE,
@@ -86,7 +88,9 @@ static opt_arg_t std_args[] =
   {"docs", 'g', OPT_ARG_NONE, OPT_DOCS},
   {"docs-public", '\0', OPT_ARG_NONE, OPT_DOCS_PUBLIC},
 
-  {"safe", '\0', OPT_ARG_OPTIONAL, OPT_SAFE},
+  {"safe-1", '\0', OPT_ARG_OPTIONAL, OPT_SAFE_1},
+  {"safe-2", '\0', OPT_ARG_OPTIONAL, OPT_SAFE_2},
+  {"safe-3", '\0', OPT_ARG_OPTIONAL, OPT_SAFE_3},
   {"cpu", '\0', OPT_ARG_REQUIRED, OPT_CPU},
   {"features", '\0', OPT_ARG_REQUIRED, OPT_FEATURES},
   {"triple", '\0', OPT_ARG_REQUIRED, OPT_TRIPLE},
@@ -147,8 +151,18 @@ static void usage(void)
     "  --docs-public    Generate code documentation for public types only.\n"
     ,
     "Rarely needed options:\n"
-    "  --safe           Allow only the listed packages to use C FFI.\n"
-    "    =package       With no packages listed, only builtin is allowed.\n"
+    "  --safe-N         Allow only the listed packages to use unsafe operations.\n"
+    "    =package       With no packages listed, only builtin is allowed. If\n"
+    "                   this option isn't specified, every package is allowed\n"
+    "                   to use all unsafe operations.\n"
+    "                   N must be a number between 1 and 3 and specifies the\n"
+    "                   kind of operations allowed. Higher values take\n"
+    "                   precedence over lower values.\n"
+    "  --safe-1         Allow the listed packages to perform operations with\n"
+    "                   undefined results.\n"
+    "  --safe-2         Allow the listed packages to perform operations with\n"
+    "                   undefined behaviour.\n"
+    "  --safe-3         Allow the listed packages to perform FFI calls.\n"
     "  --cpu            Set the target CPU.\n"
     "    =name          Default is the host CPU.\n"
     "  --features       CPU features to enable or disable.\n"
@@ -316,7 +330,7 @@ ponyc_opt_process_t ponyc_opt_process(opt_state_t* s, pass_opt_t* opt,
       case OPT_VERSION:
         printf("%s\n", PONY_VERSION_STR);
         printf("Defaults: pic=%s ssl=%s\n", opt->pic ? "true" : "false",
-            PONY_DEFAULT_SSL);
+          PONY_DEFAULT_SSL);
         return EXIT_0;
 
       case OPT_HELP:
@@ -348,24 +362,26 @@ ponyc_opt_process_t ponyc_opt_process(opt_state_t* s, pass_opt_t* opt,
       case OPT_PIC: opt->pic = true; break;
       case OPT_NOPIC: opt->pic = false; break;
       case OPT_DOCS:
-        {
-          opt->docs = true;
-          opt->docs_private = true;
-        }
+        opt->docs = true;
+        opt->docs_private = true;
         break;
       case OPT_DOCS_PUBLIC:
-        {
-          opt->docs = true;
-          opt->docs_private = false;
-        }
+        opt->docs = true;
+        opt->docs_private = false;
         break;
-      case OPT_SAFE:
-        if(!package_add_safe(s->arg_val, opt))
+      case OPT_SAFE_1:
+      case OPT_SAFE_2:
+      case OPT_SAFE_3:
+      {
+        safety_level_t safety_level = ((int)id - OPT_SAFE_1) + 1;
+        pony_assert(((int)safety_level > 0) && ((int)safety_level < 4));
+        if(!package_add_safe(s->arg_val, opt, safety_level))
         {
           printf("Error adding safe packages: %s\n", s->arg_val);
           exit_code = EXIT_255;
         }
         break;
+      }
 
       case OPT_CPU: opt->cpu = s->arg_val; break;
       case OPT_FEATURES: opt->features = s->arg_val; break;
@@ -398,17 +414,17 @@ ponyc_opt_process_t ponyc_opt_process(opt_state_t* s, pass_opt_t* opt,
       case OPT_ANTLRRAW: print_grammar(true, false); return EXIT_0;
 
       case OPT_VERBOSE:
+      {
+        int v = atoi(s->arg_val);
+        if(v >= 0 && v <= 4)
         {
-          int v = atoi(s->arg_val);
-          if(v >= 0 && v <= 4)
-          {
-            opt->verbosity = (verbosity_level)v;
-          } else {
-            printf("Verbosity must be 0..4, %d is invalid\n", v);
-            exit_code = EXIT_255;
-          }
+          opt->verbosity = (verbosity_level)v;
+        } else {
+          printf("Verbosity must be 0..4, %d is invalid\n", v);
+          exit_code = EXIT_255;
         }
         break;
+      }
 
       case OPT_PASSES:
         if(!limit_passes(opt, s->arg_val))

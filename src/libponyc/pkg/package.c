@@ -76,7 +76,7 @@ struct package_t
   size_t group_index;
   size_t next_hygienic_id;
   size_t low_index;
-  bool allow_ffi;
+  safety_level_t safety_level;
   bool on_stack;
 };
 
@@ -93,6 +93,13 @@ struct package_group_t
 {
   char* signature;
   package_set_t members;
+};
+
+struct safe_package_t
+{
+  const char* path;
+  safety_level_t safety_level;
+  struct safe_package_t* next;
 };
 
 // Per defined magic package state
@@ -446,6 +453,21 @@ static const char* find_path(ast_t* from, const char* path,
 }
 
 
+static safety_level_t get_safety_level(const char* path, pass_opt_t* opt)
+{
+  if(opt->safe_packages == NULL)
+    return SAFETY_FFI;
+
+  for(safe_package_t* p = opt->safe_packages; p != NULL; p = p->next)
+  {
+    if(path == p->path)
+      return p->safety_level;
+  }
+
+  return SAFETY_SAFE;
+}
+
+
 // Convert the given ID to a hygenic string. The resulting string should not be
 // deleted and is valid indefinitely.
 static const char* id_to_string(const char* prefix, size_t id)
@@ -585,12 +607,7 @@ static ast_t* create_package(ast_t* program, const char* name,
   ast_set(program, pkg->path, package, SYM_NONE, false);
   ast_set(program, pkg->id, package, SYM_NONE, false);
 
-  strlist_t* safe = opt->safe_packages;
-
-  if((safe != NULL) && (strlist_find(safe, pkg->path) == NULL))
-    pkg->allow_ffi = false;
-  else
-    pkg->allow_ffi = true;
+  pkg->safety_level = get_safety_level(pkg->path, opt);
 
   pkg->on_stack = false;
 
@@ -599,8 +616,10 @@ static ast_t* create_package(ast_t* program, const char* name,
 
 
 // Check that the given path exists and add it to our package search paths
-static bool add_path(const char* path, pass_opt_t* opt)
+static bool add_path(const char* path, pass_opt_t* opt, void* data)
 {
+  (void)data;
+
 #ifdef PLATFORM_IS_WINDOWS
   // The Windows implementation of stat() cannot cope with trailing a \ on a
   // directory name, so we remove it here if present. It is not safe to modify
@@ -642,17 +661,33 @@ static bool add_relative_path(const char* path, const char* relpath,
 
   strcpy(buf, path);
   strcat(buf, relpath);
-  return add_path(buf, opt);
+  return add_path(buf, opt, NULL);
 }
 
 
-static bool add_safe(const char* path, pass_opt_t* opt)
+static bool add_safe(const char* path, pass_opt_t* opt, void* data)
 {
-  path = stringtab(path);
-  strlist_t* safe = opt->safe_packages;
+  safety_level_t safety_level = *(safety_level_t*)data;
 
-  if(strlist_find(safe, path) == NULL)
-    opt->safe_packages = strlist_append(safe, path);
+  path = stringtab(path);
+  safe_package_t* safe = opt->safe_packages;
+
+  for(safe_package_t* p = safe; p != NULL; p = p->next)
+  {
+    if(p->path == path)
+    {
+      if(p->safety_level < safety_level)
+        p->safety_level = safety_level;
+
+      return true;
+    }
+  }
+
+  safe_package_t* p = POOL_ALLOC(safe_package_t);
+  p->path = path;
+  p->safety_level = safety_level;
+  p->next = safe;
+  opt->safe_packages = p;
 
   return true;
 }
@@ -672,7 +707,7 @@ static bool add_exec_dir(pass_opt_t* opt)
     return false;
   }
 
-  add_path(path, opt);
+  add_path(path, opt, NULL);
 
   // Allow ponyc to find the lib directory when it is installed.
 #ifdef PLATFORM_IS_WINDOWS
@@ -723,34 +758,27 @@ bool package_init(pass_opt_t* opt)
 
   // Finally we add OS specific paths.
 #ifdef PLATFORM_IS_POSIX_BASED
-  add_path("/usr/local/lib", opt);
-  add_path("/opt/local/lib", opt);
+  add_path("/usr/local/lib", opt, NULL);
+  add_path("/opt/local/lib", opt, NULL);
 #endif
 
   // Convert all the safe packages to their full paths.
-  strlist_t* full_safe = NULL;
-  strlist_t* safe = opt->safe_packages;
+  safe_package_t* safe = opt->safe_packages;
 
   while(safe != NULL)
   {
-    const char* path;
-    safe = strlist_pop(safe, &path);
-
     // Lookup (and hence normalise) path.
-    path = find_path(NULL, path, NULL, opt);
+    const char* path = find_path(NULL, safe->path, NULL, opt);
 
     if(path == NULL)
     {
-      strlist_free(full_safe);
-      strlist_free(safe);
-      opt->safe_packages = NULL;
+      package_clear_safe(opt);
       return false;
     }
 
-    full_safe = strlist_push(full_safe, path);
+    safe->path = path;
+    safe = safe->next;
   }
-
-  opt->safe_packages = full_safe;
 
   if(opt->simple_builtin)
     package_add_magic_src("builtin", simple_builtin, opt);
@@ -759,7 +787,7 @@ bool package_init(pass_opt_t* opt)
 }
 
 
-bool handle_path_list(const char* paths, path_fn f, pass_opt_t* opt)
+bool handle_path_list(const char* paths, path_fn f, pass_opt_t* opt, void* data)
 {
   if(paths == NULL)
     return true;
@@ -789,7 +817,7 @@ bool handle_path_list(const char* paths, path_fn f, pass_opt_t* opt)
 
       strncpy(path, paths, len);
       path[len] = '\0';
-      ok = f(path, opt) && ok;
+      ok = f(path, opt, data) && ok;
     }
 
     if(p == NULL) // No more separators
@@ -803,14 +831,31 @@ bool handle_path_list(const char* paths, path_fn f, pass_opt_t* opt)
 
 void package_add_paths(const char* paths, pass_opt_t* opt)
 {
-  handle_path_list(paths, add_path, opt);
+  handle_path_list(paths, add_path, opt, NULL);
 }
 
 
-bool package_add_safe(const char* paths, pass_opt_t* opt)
+bool package_add_safe(const char* paths, pass_opt_t* opt,
+  safety_level_t safety_level)
 {
-  add_safe("builtin", opt);
-  return handle_path_list(paths, add_safe, opt);
+  safety_level_t builtin_safety = SAFETY_FFI;
+  add_safe("builtin", opt, &builtin_safety);
+  return handle_path_list(paths, add_safe, opt, &safety_level);
+}
+
+
+void package_clear_safe(pass_opt_t* opt)
+{
+  safe_package_t* p = opt->safe_packages;
+
+  while(p != NULL)
+  {
+    safe_package_t* next = p->next;
+    POOL_FREE(safe_package_t, p);
+    p = next;
+  }
+
+  opt->safe_packages = NULL;
 }
 
 
@@ -1047,11 +1092,11 @@ const char* package_hygienic_id(typecheck_t* t)
 }
 
 
-bool package_allow_ffi(typecheck_t* t)
+bool package_allow_unsafe(typecheck_t* t, safety_level_t safety)
 {
   pony_assert(t->frame->package != NULL);
   package_t* pkg = (package_t*)ast_data(t->frame->package);
-  return pkg->allow_ffi;
+  return pkg->safety_level >= safety;
 }
 
 
@@ -1529,9 +1574,6 @@ void package_done(pass_opt_t* opt)
   strlist_free(opt->package_search_paths);
   opt->package_search_paths = NULL;
 
-  strlist_free(opt->safe_packages);
-  opt->safe_packages = NULL;
-
   package_clear_magic(opt);
 }
 
@@ -1581,7 +1623,7 @@ static void package_serialise(pony_ctx_t* ctx, void* object, void* buf,
   dst->group_index = package->group_index;
   dst->next_hygienic_id = package->next_hygienic_id;
   dst->low_index = package->low_index;
-  dst->allow_ffi = package->allow_ffi;
+  dst->safety_level = package->safety_level;
   dst->on_stack = package->on_stack;
 }
 

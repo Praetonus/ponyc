@@ -367,6 +367,20 @@ static bool is_reified_fun_sub_fun(ast_t* sub, ast_t* super,
     return false;
   }
 
+  safety_level_t sub_safety = method_safety(sub);
+  safety_level_t super_safety = method_safety(super);
+
+  if(sub_safety > super_safety)
+  {
+    if(errorf != NULL)
+    {
+      ast_error_frame(errorf, sub,
+        "methods have incompatible safety levels");
+    }
+
+    return false;
+  }
+
   return true;
 }
 
@@ -2177,4 +2191,26 @@ bool contains_dontcare(ast_t* ast)
   }
 
   return false;
+}
+
+safety_level_t method_safety(ast_t* ast)
+{
+  switch(ast_id(ast))
+  {
+    case TK_FUN:
+    case TK_BE:
+    case TK_NEW:
+      break;
+
+    default:
+      pony_assert(0);
+      return SAFETY_SAFE;
+  }
+
+  if(ast_has_annotation(ast, "undefined_behaviour"))
+    return SAFETY_BEHAVIOUR;
+  else if(ast_has_annotation(ast, "undefined_results"))
+    return SAFETY_RESULTS;
+
+  return SAFETY_SAFE;
 }

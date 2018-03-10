@@ -3,6 +3,8 @@
 
 #include "util.h"
 
+#include "pkg/package.h"
+
 
 #define TEST_COMPILE(src) DO(test_compile(src, "verify"))
 
@@ -694,4 +696,76 @@ TEST_F(VerifyTest, PartialFunCallInTryBlock)
       const char** frames[] = {frame1, NULL};
       DO(test_expected_error_frames(src, "verify", errs, frames));
   }
+}
+
+TEST_F(VerifyTest, UnsafeAllowed_UndefinedResults)
+{
+  const char* src =
+    "actor Main\n"
+    "  new create(env: Env) => foo()\n"
+    "  fun \\undefined_results\\ foo() => None";
+
+  package_add_safe("prog", &opt, SAFETY_FFI);
+
+  TEST_COMPILE(src);
+}
+
+TEST_F(VerifyTest, UnsafeAllowed_UndefinedBehaviour)
+{
+  const char* src =
+    "actor Main\n"
+    "  new create(env: Env) => foo()\n"
+    "  fun \\undefined_behaviour\\ foo() => None";
+
+  package_add_safe("prog", &opt, SAFETY_FFI);
+
+  TEST_COMPILE(src);
+}
+
+TEST_F(VerifyTest, UnsafeAllowed_FFI)
+{
+  const char* src =
+    "actor Main\n"
+    "  new create(env: Env) => @foo[None]()";
+
+  package_add_safe("prog", &opt, SAFETY_FFI);
+
+  TEST_COMPILE(src);
+}
+
+TEST_F(VerifyTest, UnsafeForbidden_UndefinedResults)
+{
+  const char* src =
+    "actor Main\n"
+    "  new create(env: Env) => foo()\n"
+    "  fun \\undefined_results\\ foo() => None";
+
+  package_add_safe("", &opt, SAFETY_FFI);
+
+  TEST_ERRORS_1(src, "this package isn't allowed to call methods that may " \
+    "have undefined results");
+}
+
+TEST_F(VerifyTest, UnsafeForbidden_UndefinedBehaviour)
+{
+  const char* src =
+    "actor Main\n"
+    "  new create(env: Env) => foo()\n"
+    "  fun \\undefined_behaviour\\ foo() => None";
+
+  package_add_safe("", &opt, SAFETY_FFI);
+
+  TEST_ERRORS_1(src, "this package isn't allowed to call methods that may " \
+    "have undefined behaviour");
+}
+
+TEST_F(VerifyTest, UnsafeForbidden_FFI)
+{
+  const char* src =
+    "actor Main\n"
+    "  new create(env: Env) => @foo[None]()";
+
+  package_add_safe("", &opt, SAFETY_FFI);
+
+  TEST_ERRORS_1(src, "this package isn't allowed to do C FFI");
 }

@@ -68,8 +68,10 @@ static void plugin_free(plugin_t* p)
 DECLARE_LIST(plugins, plugins_t, plugin_t);
 DEFINE_LIST(plugins, plugins_t, plugin_t, NULL, plugin_free);
 
-static bool load_plugin(const char* path, pass_opt_t* opt)
+static bool load_plugin(const char* path, pass_opt_t* opt, void* data)
 {
+  (void)data;
+
   plugin_handle_t handle = PLUGIN_LOAD(path);
 
   if(handle == NULL)
@@ -109,7 +111,7 @@ static bool load_plugin(const char* path, pass_opt_t* opt)
 
 bool plugin_load(pass_opt_t* opt, const char* paths)
 {
-  return handle_path_list(paths, load_plugin, opt);
+  return handle_path_list(paths, load_plugin, opt, NULL);
 }
 
 void plugin_print_help(pass_opt_t* opt)

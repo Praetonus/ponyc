@@ -5,6 +5,7 @@
 #include "../ast/ast.h"
 #include "../ast/error.h"
 #include "../pass/pass.h"
+#include "../pkg/package.h"
 
 PONY_EXTERN_C_BEGIN
 
@@ -60,6 +61,8 @@ bool is_top_type(ast_t* type, bool ignore_cap);
 bool is_entity(ast_t* type, token_id entity);
 
 bool contains_dontcare(ast_t* ast);
+
+safety_level_t method_safety(ast_t* ast);
 
 PONY_EXTERN_C_END
 

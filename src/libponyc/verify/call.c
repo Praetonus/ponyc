@@ -2,8 +2,47 @@
 #include "../ast/id.h"
 #include "../pkg/package.h"
 #include "../type/lookup.h"
+#include "../type/subtype.h"
 #include "ponyassert.h"
 
+
+static bool check_call_safety(pass_opt_t* opt, ast_t* ast)
+{
+  pony_assert((ast_id(ast) == TK_FUNREF) || (ast_id(ast) == TK_FUNCHAIN) ||
+    (ast_id(ast) == TK_NEWREF));
+
+  // Bailout quickly if we know we're safe.
+  if(package_allow_unsafe(&opt->check, SAFETY_BEHAVIOUR))
+    return true;
+
+  AST_GET_CHILDREN(ast, receiver, method);
+
+  // Receiver might be wrapped in another funref/newref
+  // if the method had type parameters for qualification.
+  if(ast_id(receiver) == ast_id(ast))
+    AST_GET_CHILDREN_NO_DECL(receiver, receiver, method);
+
+  deferred_reification_t* method_def = lookup(opt, receiver, ast_type(receiver),
+    ast_name(method));
+  ast_t* method_ast = method_def->ast;
+  deferred_reify_free(method_def);
+
+  pony_assert(ast_id(method_ast) == TK_FUN || ast_id(method_ast) == TK_BE ||
+    ast_id(method_ast) == TK_NEW);
+
+  safety_level_t safety = method_safety(method_ast);
+
+  if(!package_allow_unsafe(&opt->check, safety))
+  {
+    ast_error(opt->check.errors, ast, "this package isn't allowed to call " \
+      "methods that may have undefined %s",
+      (safety == SAFETY_RESULTS) ? "results" : "behaviour");
+    ast_error_continue(opt->check.errors, method_ast, "method is here");
+    return false;
+  }
+
+  return true;
+}
 
 static bool check_partial_function_call(pass_opt_t* opt, ast_t* ast)
 {
@@ -130,6 +169,9 @@ bool verify_function_call(pass_opt_t* opt, ast_t* ast)
   pony_assert((ast_id(ast) == TK_FUNREF) || (ast_id(ast) == TK_FUNCHAIN) ||
     (ast_id(ast) == TK_NEWREF));
 
+  if(!check_call_safety(opt, ast))
+    return false;
+
   ast_inheritflags(ast);
   ast_setmightsend(ast);
 
@@ -155,7 +197,7 @@ bool verify_ffi_call(pass_opt_t* opt, ast_t* ast)
 {
   pony_assert(ast_id(ast) == TK_FFICALL);
 
-  if(!package_allow_ffi(&opt->check))
+  if(!package_allow_unsafe(&opt->check, SAFETY_FFI))
   {
     ast_error(opt->check.errors, ast, "this package isn't allowed to do C FFI");
     return false;
